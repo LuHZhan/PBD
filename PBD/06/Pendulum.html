@@ -88,8 +88,10 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
                 var p = this;
                 for (var i = 1; i < p.masses.length; i++) {
                     p.vel[i].y += dt * scene.gravity;
+
                     p.prevPos[i].x = p.pos[i].x;
                     p.prevPos[i].y = p.pos[i].y;
+                    
                     p.pos[i].x += p.vel[i].x * dt;
                     p.pos[i].y += p.vel[i].y * dt;
                 }

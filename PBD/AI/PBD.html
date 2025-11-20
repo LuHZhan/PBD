@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>PBD Cloth - Impulse Interaction</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: "Segoe UI", sans-serif; }
+        #info {
+            position: absolute; top: 10px; width: 100%; text-align: center;
+            color: #eee; pointer-events: none; user-select: none;
+            text-shadow: 1px 1px 2px black; z-index: 10;
+        }
+        .highlight { color: #ff4444; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h2>PBD 布料模拟 - 冲击互动版</h2>
+        <p>👆 <span class="highlight">左键点击布料</span> 施加物理冲击 | 右键平移 | 滚轮缩放</p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+                "lil-gui": "https://unpkg.com/lil-gui@0.19.1/dist/lil-gui.esm.min.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import GUI from 'lil-gui';
+
+        // ==========================================
+        // 1. 参数配置
+        // ==========================================
+        const params = {
+            width: 30,
+            height: 30,
+            restDistance: 0.3,
+            gravity: -9.8,
+            iterations: 8,
+            damping: 0.99,
+            windX: 0.0,
+            windZ: 0.0,
+            
+            // 冲击参数
+            impulseStrength: 40,  // 冲击力度
+            impulseRadius: 1.5,   // 冲击范围半径
+            
+            showConstraints: false,
+            shearEnabled: true,
+            reset: () => initSystem()
+        };
+
+        // ==========================================
+        // 2. 物理定义 (PBD)
+        // ==========================================
+        class Particle {
+            constructor(x, y, z, mass) {
+                this.pos = new THREE.Vector3(x, y, z);
+                this.prevPos = new THREE.Vector3(x, y, z); // 上一帧位置
+                this.invMass = mass > 0 ? 1.0 / mass : 0;
+                this.originalPos = new THREE.Vector3(x, y, z); // 用于重置
+            }
+
+            integrate(dt) {
+                if (this.invMass === 0) return;
+
+                // Verlet 积分: v = pos - prevPos
+                const velocity = this.pos.clone().sub(this.prevPos).multiplyScalar(params.damping);
+                
+                this.prevPos.copy(this.pos);
+
+                const force = new THREE.Vector3(params.windX, params.gravity, params.windZ);
+                // 简单风力扰动
+                force.x += Math.sin(Date.now() * 0.005 + this.pos.y) * 0.5;
+
+                this.pos.add(velocity);
+                this.pos.addScaledVector(force, dt * dt);
+            }
+
+            /**
+             * 新增：施加冲量
+             * @param {THREE.Vector3} forceVector - 冲击的方向和大小
+             * @param {Number} dt - 时间步长
+             */
+            applyImpulse(forceVector, dt) {
+                if (this.invMass === 0) return;
+                
+                // 在 PBD 中，改变速度的方法是修改 prevPos
+                // v_new = v_old + impulse
+                // (pos - prevPos_new)/dt = (pos - prevPos_old)/dt + impulse
+                // -> prevPos_new = prevPos_old - impulse * dt
+                
+                this.prevPos.sub(forceVector.clone().multiplyScalar(dt));
+            }
+        }
+
+        class Constraint {
+            constructor(p1, p2, restDist) {
+                this.p1 = p1;
+                this.p2 = p2;
+                this.restDist = restDist;
+            }
+
+            solve() {
+                const delta = new THREE.Vector3().subVectors(this.p2.pos, this.p1.pos);
+                const currentDist = delta.length();
+                if (currentDist === 0) return;
+
+                const correction = (currentDist - this.restDist) / currentDist;
+                const w1 = this.p1.invMass;
+                const w2 = this.p2.invMass;
+                const wTotal = w1 + w2;
+
+                if (wTotal === 0) return;
+
+                const displacement = delta.multiplyScalar(correction);
+
+                if (w1 > 0) this.p1.pos.addScaledVector(displacement, w1 / wTotal);
+                if (w2 > 0) this.p2.pos.addScaledVector(displacement, -w2 / wTotal);
+            }
+        }
+
+        // ==========================================
+        // 3. 场景与渲染
+        // ==========================================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111111);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 25);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // 灯光
+        scene.add(new THREE.AmbientLight(0x404040));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        dirLight.position.set(5, 10, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // 地板
+        const floor = new THREE.Mesh(
+            new THREE.PlaneGeometry(50, 50),
+            new THREE.MeshStandardMaterial({ color: 0x333333 })
+        );
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -10;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // 点击特效标记 (一个小红球，点击时出现)
+        const hitMarkerGeo = new THREE.SphereGeometry(0.2, 8, 8);
+        const hitMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0 });
+        const hitMarker = new THREE.Mesh(hitMarkerGeo, hitMarkerMat);
+        scene.add(hitMarker);
+
+        // ==========================================
+        // 4. 系统初始化
+        // ==========================================
+        let particles = [];
+        let constraints = [];
+        let clothMesh, clothGeometry, constraintsLine;
+
+        function initSystem() {
+            if (clothMesh) { scene.remove(clothMesh); clothGeometry.dispose(); }
+            if (constraintsLine) { scene.remove(constraintsLine); }
+
+            particles = [];
+            constraints = [];
+            const w = params.width;
+            const h = params.height;
+
+            // 创建粒子
+            for (let y = 0; y <= h; y++) {
+                for (let x = 0; x <= w; x++) {
+                    const xPos = (x - w / 2) * params.restDistance;
+                    const yPos = 8 - y * params.restDistance;
+                    
+                    // 固定顶部 3 个点
+                    let mass = 1.0;
+                    if (y === 0 && (x === 0 || x === w || x === Math.floor(w/2))) mass = 0;
+
+                    particles.push(new Particle(xPos, yPos, 0, mass));
+                }
+            }
+
+            const getIndex = (x, y) => y * (w + 1) + x;
+
+            // 创建约束
+            for (let y = 0; y <= h; y++) {
+                for (let x = 0; x <= w; x++) {
+                    const idx = getIndex(x, y);
+                    // 结构约束
+                    if (x < w) constraints.push(new Constraint(particles[idx], particles[getIndex(x + 1, y)], params.restDistance));
+                    if (y < h) constraints.push(new Constraint(particles[idx], particles[getIndex(x, y + 1)], params.restDistance));
+                    // 剪切约束
+                    if (params.shearEnabled && x < w && y < h) {
+                        const diag = params.restDistance * Math.sqrt(2);
+                        constraints.push(new Constraint(particles[idx], particles[getIndex(x+1, y+1)], diag));
+                        constraints.push(new Constraint(particles[getIndex(x+1, y)], particles[getIndex(x, y+1)], diag));
+                    }
+                }
+            }
+
+            // 创建网格
+            clothGeometry = new THREE.PlaneGeometry(1, 1, w, h);
+            const clothMat = new THREE.MeshStandardMaterial({ 
+                color: 0x3498db, 
+                side: THREE.DoubleSide, 
+                flatShading: true,
+                roughness: 0.6
+            });
+            clothMesh = new THREE.Mesh(clothGeometry, clothMat);
+            clothMesh.castShadow = true;
+            clothMesh.frustumCulled = false;
+            scene.add(clothMesh);
+
+            // 创建约束线
+            const lineGeo = new THREE.BufferGeometry();
+            lineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(constraints.length * 6), 3));
+            constraintsLine = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0xffff00, opacity: 0.4, transparent: true }));
+            constraintsLine.visible = params.showConstraints;
+            constraintsLine.frustumCulled = false;
+            scene.add(constraintsLine);
+        }
+
+        // ==========================================
+        // 5. 物理与渲染循环
+        // ==========================================
+        const fixedTimeStep = 0.016;
+
+        function updatePhysics() {
+            for (let p of particles) p.integrate(fixedTimeStep);
+            for (let i = 0; i < params.iterations; i++) {
+                for (let c of constraints) c.solve();
+            }
+        }
+
+        function updateMeshes() {
+            const posAttr = clothGeometry.attributes.position;
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i].pos;
+                posAttr.setXYZ(i, p.x, p.y, p.z);
+            }
+            posAttr.needsUpdate = true;
+            clothGeometry.computeVertexNormals();
+
+            if (params.showConstraints && constraintsLine.visible) {
+                const linePos = constraintsLine.geometry.attributes.position.array;
+                let idx = 0;
+                for (let c of constraints) {
+                    linePos[idx++] = c.p1.pos.x; linePos[idx++] = c.p1.pos.y; linePos[idx++] = c.p1.pos.z;
+                    linePos[idx++] = c.p2.pos.x; linePos[idx++] = c.p2.pos.y; linePos[idx++] = c.p2.pos.z;
+                }
+                constraintsLine.geometry.attributes.position.needsUpdate = true;
+            }
+
+            // 淡出点击特效
+            if (hitMarker.material.opacity > 0) {
+                hitMarker.material.opacity -= 0.05;
+                hitMarker.scale.multiplyScalar(1.1); // 扩散动画
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics();
+            updateMeshes();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // ==========================================
+        // 6. 互动逻辑 (Raycasting & Impulse)
+        // ==========================================
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        window.addEventListener('pointerdown', (event) => {
+            // 只响应左键 (0)
+            if (event.button !== 0) return;
+
+            // 1. 计算鼠标坐标 (-1 到 1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // 2. 投射光线
+            raycaster.setFromCamera(mouse, camera);
+            
+            // 3. 检测是否击中布料
+            const intersects = raycaster.intersectObject(clothMesh);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                const hitPoint = hit.point;
+                const rayDir = raycaster.ray.direction.clone().normalize(); // 冲击方向 (摄像机朝向)
+
+                // 视觉反馈
+                hitMarker.position.copy(hitPoint);
+                hitMarker.scale.set(1, 1, 1);
+                hitMarker.material.opacity = 1.0;
+
+                // 4. 物理计算：寻找范围内的粒子并施加冲量
+                // 我们不依赖 face index，而是简单的根据距离 (Splash Damage)
+                for (let p of particles) {
+                    const dist = p.pos.distanceTo(hitPoint);
+                    
+                    if (dist < params.impulseRadius) {
+                        // 距离衰减：中心点受力最大
+                        const falloff = 1.0 - (dist / params.impulseRadius);
+                        
+                        // 构造冲击向量：方向 * 力度 * 衰减
+                        const impulse = rayDir.clone().multiplyScalar(params.impulseStrength * falloff);
+                        
+                        p.applyImpulse(impulse, fixedTimeStep);
+                    }
+                }
+            }
+        });
+
+        // ==========================================
+        // 7. GUI 控制
+        // ==========================================
+        initSystem();
+        animate();
+
+        const gui = new GUI({ title: "控制面板" });
+        
+        const fInter = gui.addFolder('🖐️ 互动设置');
+        fInter.add(params, 'impulseStrength', 10, 100).name('冲击力度');
+        fInter.add(params, 'impulseRadius', 0.5, 5.0).name('冲击半径');
+
+        const fSim = gui.addFolder('⚙️ 模拟参数');
+        fSim.add(params, 'gravity', -20, 2).name('重力');
+        fSim.add(params, 'windX', -5, 5).name('风力 X');
+        fSim.add(params, 'shearEnabled').name('启用抗剪切').onChange(initSystem);
+
+        const fDebug = gui.addFolder('👀 视觉调试');
+        fDebug.add(params, 'showConstraints').name('显示约束').onChange(v => constraintsLine.visible = v);
+        fDebug.add(clothMesh.material, 'wireframe').name('网格线框');
+
+        gui.add(params, 'reset').name('重置模拟');
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
