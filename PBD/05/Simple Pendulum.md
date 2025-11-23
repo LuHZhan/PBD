@@ -74,6 +74,13 @@ force = m·ω²·r + mg·cos(θ)
 
 ### PBD方法（Bead）：
 
+**约束求解核心**：
+
+- **约束函数**：`C(x) = |x - center| - radius = 0`
+- **约束违反量**：`λ = radius - |x - center|`
+- **梯度方向**：`∇C = (x - center)/|x - center|`
+- **位置修正**：`Δx = λ·∇C`
+
 ```javascript
 // 基于几何投影
 var lambda = physicsScene.wireRadius - len;  // 位置修正量
