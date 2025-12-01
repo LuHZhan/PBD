@@ -1,0 +1,19 @@
+.idea
+.vs
+Binaries
+Intermediate
+Saved
+Typing
+
+# 忽略 Content 下所有
+Content/*
+
+# 保留特定目录
+!Content/Luhz/
+!Content/Luhz/**
+!Content/Blueprints/
+!Content/Blueprints/**
+BlueprintJsons/Core/__pycache__
+Plugins/Puerts
+Plugins/Puerts.zip
+Package
