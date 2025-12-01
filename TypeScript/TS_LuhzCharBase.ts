@@ -95,14 +95,7 @@ class TS_LuhzCharBase extends UE.Character {
     // ============================================================
 
     ReceiveBeginPlay(): void {
-        UE.KismetSystemLibrary.PrintString(
-            this.GetWorld(),
-            "TS_LuhzCharBase Begin",
-            true, true,
-            new UE.LinearColor(1.0, 0.0, 0.0, 1.0),
-            5.0,
-            "None"
-        );
+
     }
 
     ReceiveTick(DeltaSeconds: number): void {
