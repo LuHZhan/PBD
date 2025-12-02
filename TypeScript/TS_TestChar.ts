@@ -4,9 +4,25 @@
  */
 
 import * as UE from 'ue'
+import {$ref, $unref} from 'puerts';
 import {uproperty} from 'ue'
 
 import './ObjectExt'
+
+// 向量运算辅助函数
+const VectorAdd = (a: UE.Vector, b: UE.Vector): UE.Vector =>
+    a.op_Addition(b);
+
+const VectorSub = (a: UE.Vector, b: UE.Vector): UE.Vector =>
+    a.op_Subtraction(b);
+
+const VectorMulFloat = (v: UE.Vector, f: number): UE.Vector =>
+    v.op_Multiply(f);
+
+const VectorMulVector = (a: UE.Vector, b: UE.Vector): UE.Vector =>
+    a.op_Multiply(b)
+const VectorDivFloat = (v: UE.Vector, f: number): UE.Vector =>
+    v.op_Division(f);
 
 class TS_TestChar extends UE.Character {
 
@@ -159,36 +175,39 @@ class TS_TestChar extends UE.Character {
      */
     GetMaxHight(/* out */ Distance: number): void {
         // 计算角色前方的点
-        const forwardDir = this.Char_Rot.Vector().GetUnsafeNormal();
+        const forwardDir = UE.KismetMathLibrary.Conv_RotatorToVector(this.Char_Rot);
+        const normalizedDir = UE.KismetMathLibrary.Normal(forwardDir);
         const scaledDistance = this.Config_dis_F_for_calculating_max_height * this.Char_Scale;
-        const forwardOffset = forwardDir * scaledDistance;
-        const Point_MaxHight = this.Char_Bottom_Loc + forwardOffset;
+        const forwardOffset = VectorMulFloat(normalizedDir, scaledDistance);
+        const Point_MaxHight = VectorAdd(this.Char_Bottom_Loc, forwardOffset);
 
         // 分解向量
-        const [pointX, pointY, pointZ] = [Point_MaxHight.X, Point_MaxHight.Y, Point_MaxHight.Z];
+        const pointX = Point_MaxHight.X;
+        const pointY = Point_MaxHight.Y;
+        const pointZ = Point_MaxHight.Z;
 
         // 计算垂直射线的起点和终点
-        const verticalOffset = (-999.0) * this.Char_Scale;
+        const verticalOffset = -999.0 * this.Char_Scale;
         const traceEndZ = pointZ + verticalOffset;
 
         const traceStart = new UE.Vector(pointX, pointY, pointZ);
         const traceEnd = new UE.Vector(pointX, pointY, traceEndZ);
 
         // 执行射线检测
-        const hitResult = new UE.HitResult();
+        const hitResult = $ref(new UE.HitResult());
         const hit = UE.KismetSystemLibrary.LineTraceSingle(
             this,
             traceStart,
             traceEnd,
             UE.ETraceTypeQuery.TraceTypeQuery1,
             false,
-            [],
+            UE.NewArray(UE.Actor),
             UE.EDrawDebugTrace.None,
             hitResult,
             true
         );
 
-        Distance = hit ? hitResult.Distance : 0.0;
+        Distance = hit ? $unref(hitResult).Distance : 0.0;
     }
 
     /**
@@ -210,8 +229,8 @@ class TS_TestChar extends UE.Character {
      */
     SetLookAtTargetInFront(): void {
         const actorLocation = this.K2_GetActorLocation();
-        const forwardOffset = new UE.Vector(100, 0, 0); // 默认前方偏移
-        this.Look_At = actorLocation + forwardOffset;
+        const forwardOffset = new UE.Vector(100, 0, 0);
+        this.Look_At = VectorAdd(actorLocation, forwardOffset);
         this.Alpha_Aim = 0.0;
     }
 
@@ -226,7 +245,7 @@ class TS_TestChar extends UE.Character {
      * Trace_InFrontOfPlayer - 玩家前方射线检测
      */
     Trace_InFrontOfPlayer(
-        /* out */ Objects: UE.EObjectTypeQuery[],
+        /* out */ Objects: UE.TArray<UE.EObjectTypeQuery>,
         Dis_F: number,
         Dis_Z_start: number,
         Dis_Z_end: number,
@@ -239,11 +258,14 @@ class TS_TestChar extends UE.Character {
         const actorLocation = this.K2_GetActorLocation();
         const forwardDir = this.GetActorForwardVector();
 
-        const traceStart = actorLocation + forwardDir * Dis_F + new UE.Vector(0, 0, Dis_Z_start);
-        const traceEnd = actorLocation + forwardDir * Dis_F + new UE.Vector(0, 0, Dis_Z_end);
+        const forwardOffset = VectorMulFloat(forwardDir, Dis_F);
+        const basePoint = VectorAdd(actorLocation, forwardOffset);
+
+        const traceStart = VectorAdd(basePoint, new UE.Vector(0, 0, Dis_Z_start));
+        const traceEnd = VectorAdd(basePoint, new UE.Vector(0, 0, Dis_Z_end));
 
         // 执行射线检测
-        const hitResult = new UE.HitResult();
+        const hitResult = $ref(new UE.HitResult());
         const debugType = ShowDebug_Always ? UE.EDrawDebugTrace.ForDuration : UE.EDrawDebugTrace.None;
 
         const hit = UE.KismetSystemLibrary.LineTraceSingleForObjects(
@@ -252,15 +274,15 @@ class TS_TestChar extends UE.Character {
             traceEnd,
             Objects,
             false,
-            [],
+            UE.NewArray(UE.Actor),
             debugType,
             hitResult,
             true,
             Trase_Color,
-            UE.LinearColor.Green
+            new UE.LinearColor(1, 0, 0, 1)
         );
 
-        Distance = hit ? hitResult.Distance : 0.0;
+        Distance = hit ? $unref(hitResult).Distance : 0.0;
         return hit;
     }
 
