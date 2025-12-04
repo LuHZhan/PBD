@@ -26,6 +26,12 @@ public class VerticalWindows : ModuleRules
 			new string[]
 			{
 				"Core",
+				"CoreUObject",
+				"Engine",
+				"Slate",
+				"SlateCore",
+				"UMG",
+				"InputCore"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -35,15 +41,17 @@ public class VerticalWindows : ModuleRules
 			new string[]
 			{
 				"Projects",
-				"InputCore",
+				"EditorStyle",
+				"EditorSubsystem",
+				"AssetTools",
+				"AssetRegistry",
+				"ContentBrowser",
+				"LevelEditor",
+				"WorkspaceMenuStructure",
+				"UMGEditor",
 				"EditorFramework",
 				"UnrealEd",
 				"ToolMenus",
-				"CoreUObject",
-				"Engine",
-				"Slate",
-				"SlateCore",
-				"UMGEditor",
 				"Blutility",
 				"UMG"
 				// ... add private dependencies that you statically link with here ...	
