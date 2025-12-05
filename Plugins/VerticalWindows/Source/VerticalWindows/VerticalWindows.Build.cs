@@ -31,7 +31,8 @@ public class VerticalWindows : ModuleRules
 				"Slate",
 				"SlateCore",
 				"UMG",
-				"InputCore"
+				"InputCore", 
+				"JsEnv"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

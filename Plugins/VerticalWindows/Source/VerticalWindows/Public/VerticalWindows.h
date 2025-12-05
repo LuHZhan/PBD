@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "JsEnv.h"
 #include "Modules/ModuleManager.h"
 
 class FToolBarBuilder;
@@ -20,10 +21,10 @@ public:
 	void PluginButtonClicked();
 	
 private:
-
 	void RegisterMenus();
-
+	
 	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+	TSharedPtr<puerts::FJsEnv> JsEnv;
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;

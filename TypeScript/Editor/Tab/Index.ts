@@ -1,35 +1,97 @@
 /**
  * VerticalWindows - 垂直标签页管理器
  *
- * 使用方法：
- * 1. 在 UE 编辑器中创建以下 Widget 蓝图：
+ * ============================================================
+ * 使用步骤
+ * ============================================================
+ *
+ * 1. 创建蓝图 Widget：
  *    - /VerticalWindows/Editor/WBP_TabItem.uasset
  *    - /VerticalWindows/Editor/WBP_TabGroup.uasset
  *    - /VerticalWindows/Editor/EDU_OpenedEditor.uasset (继承 EUW_Windows)
  *
- * 2. 在 EDU_OpenedEditor 蓝图中：
- *    - Event Construct -> 调用 TS 函数 initTabManager()
- *    - Event Destruct  -> 调用 TS 函数 cleanupTabManager()
- *    - RefreshButton.OnClicked -> 调用 TS 函数 OnRefreshClicked()
- *    - ExpandAllButton.OnClicked -> 调用 TS 函数 OnExpandAllClicked()
- *    - CollapseAllButton.OnClicked -> 调用 TS 函数 OnCollapseAllClicked()
- *    - SaveAllButton.OnClicked -> 调用 TS 函数 OnSaveAllClicked()
+ * 2. 在蓝图中为组件勾选 "Is Variable"：
  *
- * 3. 在 WBP_TabItem 蓝图中：
- *    - RootButton.OnClicked -> 调用 TS 函数 OnItemClicked()
- *    - CloseButton.OnClicked -> 调用 TS 函数 OnCloseClicked()
+ *    WBP_TabItem 需要勾选：
+ *    - RootButton (Button) [必须] - 整个标签项的点击区域
+ *    - TitleText (TextBlock) [必须] - 显示标签名称
+ *    - ColorBar (Image) [必须] - 左侧颜色条
+ *    - Background (Border) [必须] - 背景
+ *    - DirtyIndicator (TextBlock) [可选] - 脏标记
+ *    - CloseButton (Button) [可选] - 关闭按钮
  *
- * 4. 在 WBP_TabGroup 蓝图中：
- *    - HeaderButton.OnClicked -> 调用 TS 函数 OnHeaderClicked()
+ *    WBP_TabGroup 需要勾选：
+ *    - HeaderButton (Button) [必须] - 分组头部点击区域
+ *    - GroupNameText (TextBlock) [必须] - 分组名称
+ *    - ItemContainer (VerticalBox) [必须] - 子标签项容器
+ *    - ColorBar (Image) [必须] - 颜色条
+ *    - ExpandIcon (Image) [可选] - 展开/折叠箭头
+ *    - CountText (TextBlock) [可选] - 标签数量
+ *
+ *    EDU_OpenedEditor 需要勾选：
+ *    - GroupContainer (VerticalBox) [必须] - 分组列表容器
+ *    - RefreshButton (Button) [可选] - 刷新按钮
+ *    - ExpandAllButton (Button) [可选] - 全部展开按钮
+ *    - CollapseAllButton (Button) [可选] - 全部折叠按钮
+ *    - SaveAllButton (Button) [可选] - 全部保存按钮
+ *
+ * 3. 在蓝图中连接事件：
+ *
+ *    EDU_OpenedEditor:
+ *    - Event Construct -> initTabManager()
+ *    - Event Destruct -> cleanupTabManager()
+ *    - RefreshButton.OnClicked -> OnRefreshClicked()
+ *
+ *    WBP_TabItem:
+ *    - RootButton.OnClicked -> OnItemClicked()
+ *    - CloseButton.OnClicked -> OnCloseClicked()
+ *
+ *    WBP_TabGroup:
+ *    - HeaderButton.OnClicked -> OnHeaderClicked()
+ *
+ * ============================================================
+ * 调试
+ * ============================================================
+ *
+ * 如果组件未正确勾选 "Is Variable"，运行时会输出类似：
+ *
+ * ========== [WBP_TabItem] 组件检查 ==========
+ * 蓝图路径: /VerticalWindows/Editor/WBP_TabItem
+ * 已找到 2/7 个组件
+ *
+ * ❌ 缺失必须组件 (2个):
+ *    请在蓝图中为以下组件勾选 "Is Variable":
+ *
+ *    • TitleText: TextBlock - 显示标签名称
+ *    • RootButton: Button - 整个标签项的点击区域
+ *
+ * ============================================
+ *
+ * 可调用 printAllRegistrations() 查看所有注册的组件需求。
  */
 
-// 导出类型
+// ============================================================
+// 导出
+// ============================================================
+
+// 类型
 export * from './Types';
 
-// 导出服务
+// 工具
+export {
+    registerWidgetComponents,
+    createWidgetAccessor,
+    validateWidget,
+    required,
+    optional,
+    printAllRegistrations,
+    getRegistrations
+} from './WidgetHelper';
+
+// 服务
 export { EditorTabService } from './EditorTabService';
 
-// 导出 Mixin 后的类
+// Mixin 类
 export { WBP_TabItemWithMixin, TabItemWidget } from './TabItemMixin';
 export { WBP_TabGroupWithMixin, TabGroupWidget } from './TabGroupMixin';
 export { EDU_OpenedEditorWithMixin, TabManagerWidget } from './TabManagerMixin';

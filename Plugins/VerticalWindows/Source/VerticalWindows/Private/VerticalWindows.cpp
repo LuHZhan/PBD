@@ -54,10 +54,26 @@ void FVerticalWindowsModule::ShutdownModule()
 	FVerticalWindowsCommands::Unregister();
 
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(VerticalWindowsTabName);
+	
+	JsEnv.Reset();
+	UE_LOG(LogTemp, Log, TEXT("[VerticalWindows] TypeScript shutdown"));
 }
 
 TSharedRef<SDockTab> FVerticalWindowsModule::OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs)
 {
+	// 创建 JS 环境
+	JsEnv = MakeShared<puerts::FJsEnv>(
+		std::make_unique<puerts::DefaultJSModuleLoader>(TEXT("JavaScript")),
+		std::make_shared<puerts::FDefaultLogger>(),
+		-1
+	);
+    
+	// 启动 TypeScript
+	JsEnv->Start("Editor/Tab/Main");
+    
+	UE_LOG(LogTemp, Log, TEXT("[VerticalWindows] TypeScript initialized"));
+
+	
 	//加载UMG的BP
 	UEditorUtilityWidgetBlueprint* UMGBP = LoadObject<UEditorUtilityWidgetBlueprint>(nullptr,
 	TEXT("/VerticalWindows/Editor/EDU_OpenedEditor.EDU_OpenedEditor"));

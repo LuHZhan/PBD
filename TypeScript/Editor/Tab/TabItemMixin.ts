@@ -1,28 +1,64 @@
 import * as UE from 'ue';
 import { blueprint } from 'puerts';
 import { IEditorTabInfo } from './Types';
+import {
+    registerWidgetComponents,
+    createWidgetAccessor,
+    required,
+    optional
+} from './WidgetHelper';
 
 // ============================================================
-// 1. 加载蓝图类（保持引用防止被 GC）
+// 配置
 // ============================================================
-const tabItemCls = UE.Class.Load('/VerticalWindows/Editor/WBP_TabItem.WBP_TabItem_C');
+
+const CLASS_NAME = 'WBP_TabItem';
+const BLUEPRINT_PATH = '/VerticalWindows/Editor/Components/WBP_TabItem';
+
+// ============================================================
+// 1. 注册组件需求
+// ============================================================
+registerWidgetComponents(CLASS_NAME, BLUEPRINT_PATH, [
+    required('RootButton',     'Button',    '整个标签项的点击区域'),
+    required('TitleText',      'TextBlock', '显示标签名称'),
+    // required('ColorBar',       'Image',     '左侧颜色条，表示资产类型'),
+    required('Background',     'Border',    '背景，用于显示选中状态'),
+    optional('DirtyIndicator', 'TextBlock', '脏标记 (*)'),
+    optional('CloseButton',    'Button',    '关闭按钮'),
+    optional('IconImage',      'Image',     '资产图标'),
+]);
+
+// ============================================================
+// 2. 加载蓝图类
+// ============================================================
+const tabItemCls = UE.Class.Load(`${BLUEPRINT_PATH}.${CLASS_NAME}_C`);
 const WBP_TabItem = blueprint.tojs<any>(tabItemCls);
-
-// ============================================================
-// 2. 声明 interface 让 Mixin 能访问 Widget 方法
-// ============================================================
-interface TabItemMixin extends UE.UserWidget {}
 
 // ============================================================
 // 3. Mixin 类定义
 // ============================================================
 class TabItemMixin {
-    // 使用 WeakMap 存储数据，避免内存泄漏
+    // WeakMap 存储数据
     private static _dataMap = new WeakMap<object, IEditorTabInfo>();
     private static _callbackMap = new WeakMap<object, {
         onClick?: (tab: IEditorTabInfo) => void;
         onClose?: (tab: IEditorTabInfo) => void;
     }>();
+    private static _accessorMap = new WeakMap<object, ReturnType<typeof createWidgetAccessor>>();
+
+    // ============ 辅助方法 ============
+
+    /**
+     * 获取组件访问器
+     */
+    private _accessor() {
+        let accessor = TabItemMixin._accessorMap.get(this);
+        if (!accessor) {
+            accessor = createWidgetAccessor(this, CLASS_NAME);
+            TabItemMixin._accessorMap.set(this, accessor);
+        }
+        return accessor;
+    }
 
     // ============ 数据方法 ============
 
@@ -60,25 +96,30 @@ class TabItemMixin {
         const data = this.getTabData();
         if (!data) return;
 
-        const titleText = this.GetWidgetFromName("TitleText") as UE.TextBlock;
-        const colorBar = this.GetWidgetFromName("ColorBar") as UE.Image;
-        const dirtyIndicator = this.GetWidgetFromName("DirtyIndicator") as UE.TextBlock;
-        const rootButton = this.GetWidgetFromName("RootButton") as UE.Button;
+        const $ = this._accessor();
 
+        // 标题
+        const titleText = $.getSilent('TitleText');
         if (titleText) {
             titleText.SetText(data.displayName);
         }
 
-        if (colorBar && data.groupColor) {
-            colorBar.SetColorAndOpacity(data.groupColor);
-        }
+        // 颜色条
+        // const colorBar = $.getSilent('ColorBar');
+        // if (colorBar && data.groupColor) {
+        //     colorBar.SetColorAndOpacity(data.groupColor);
+        // }
 
+        // 脏标记
+        const dirtyIndicator = $.getSilent('DirtyIndicator');
         if (dirtyIndicator) {
             dirtyIndicator.SetVisibility(
                 data.isDirty ? UE.ESlateVisibility.Visible : UE.ESlateVisibility.Collapsed
             );
         }
 
+        // 工具提示
+        const rootButton = $.getSilent('RootButton');
         if (rootButton) {
             rootButton.SetToolTipText(`${data.assetPath}\n类型: ${data.assetType}`);
         }
@@ -88,7 +129,7 @@ class TabItemMixin {
      * 设置选中状态
      */
     setSelected(selected: boolean): void {
-        const background = this.GetWidgetFromName("Background") as UE.Border;
+        const background = this._accessor().getSilent('Background');
         if (background) {
             const color = selected
                 ? new UE.LinearColor(0.2, 0.4, 0.8, 0.5)
@@ -97,7 +138,7 @@ class TabItemMixin {
         }
     }
 
-    // ============ 事件处理（蓝图中连接按钮到这些方法） ============
+    // ============ 事件处理 ============
 
     /**
      * 点击标签项 - 在蓝图中将 RootButton.OnClicked 连接到此方法
@@ -128,6 +169,6 @@ class TabItemMixin {
 export const WBP_TabItemWithMixin = blueprint.mixin(WBP_TabItem, TabItemMixin);
 
 // ============================================================
-// 5. 导出类型
+// 5. 导出
 // ============================================================
 export type TabItemWidget = InstanceType<typeof WBP_TabItemWithMixin>;

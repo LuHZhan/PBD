@@ -3,28 +3,41 @@ import { blueprint } from 'puerts';
 import { IEditorTabInfo, ITabGroupData } from './Types';
 import { EditorTabService } from './EditorTabService';
 import { WBP_TabGroupWithMixin, TabGroupWidget } from './TabGroupMixin';
+import {
+    registerWidgetComponents,
+    createWidgetAccessor,
+    required,
+    optional
+} from './WidgetHelper';
 
 // ============================================================
-// 1. 加载 EUW_Windows 蓝图类
+// 配置
 // ============================================================
-const euwCls = UE.Class.Load('/VerticalWindows/Editor/EDU_OpenedEditor.EDU_OpenedEditor_C');
-const EDU_OpenedEditor = blueprint.tojs<any>(euwCls);
+
+const CLASS_NAME = 'EDU_OpenedEditor';
+const BLUEPRINT_PATH = '/VerticalWindows/Editor/EDU_OpenedEditor';
 
 // ============================================================
-// 2. interface 扩展 (让 Mixin 能访问 EUW_Windows 的方法)
+// 1. 注册组件需求
 // ============================================================
-interface TabManagerMixin extends UE.UserWidget {
-    // C++ EUW_Windows 方法 (带 _EditorOnly 后缀)
-    GetAllOpenTabs_EditorOnly(): any;
-    GetGroupedTabs_EditorOnly(): any;
-    ActivateTab_EditorOnly(tabId: string): boolean;
-    CloseTab_EditorOnly(tabId: string): boolean;
-    BrowseToAsset_EditorOnly(assetPath: string): void;
-    SaveAsset_EditorOnly(assetPath: string): boolean;
-    SaveAllDirtyAssets_EditorOnly(): void;
-    RefreshTabs_EditorOnly(): void;
-    OnTabsChanged: any;
+registerWidgetComponents(CLASS_NAME, BLUEPRINT_PATH, [
+    required('GroupContainer',    'VerticalBox', '分组列表容器'),
+    optional('RefreshButton',     'Button',      '刷新按钮'),
+    optional('ExpandAllButton',   'Button',      '全部展开按钮'),
+    optional('CollapseAllButton', 'Button',      '全部折叠按钮'),
+    optional('SaveAllButton',     'Button',      '全部保存按钮'),
+    optional('SearchBox',         'EditableText','搜索框'),
+]);
+
+// ============================================================
+// 2. 加载蓝图类
+// ============================================================
+const euwCls = UE.Class.Load(`${BLUEPRINT_PATH}.${CLASS_NAME}_C`);
+if (!euwCls) {
+    console.error(`[${CLASS_NAME}] 无法加载蓝图类: ${BLUEPRINT_PATH}.${CLASS_NAME}_C`);
+    console.error(`请确保蓝图文件存在于正确路径`);
 }
+const EDU_OpenedEditor = euwCls ? blueprint.tojs<any>(euwCls) : null;
 
 // ============================================================
 // 3. Mixin 类定义
@@ -32,9 +45,25 @@ interface TabManagerMixin extends UE.UserWidget {
 class TabManagerMixin {
     // WeakMap 存储数据
     private static _serviceMap = new WeakMap<object, EditorTabService>();
-    private static _groupsMap = new WeakMap<object, Map<string, TabGroupWidget>>();
+    private static _groupsMap = new WeakMap<object, Map<string, any>>();
     private static _expandStatesMap = new WeakMap<object, Map<string, boolean>>();
     private static _initializedMap = new WeakMap<object, boolean>();
+    private static _accessorMap = new WeakMap<object, ReturnType<typeof createWidgetAccessor>>();
+
+    // ============ 辅助方法 ============
+
+    private _accessor() {
+        let accessor = TabManagerMixin._accessorMap.get(this);
+        if (!accessor) {
+            accessor = createWidgetAccessor(this, CLASS_NAME);
+            TabManagerMixin._accessorMap.set(this, accessor);
+        }
+        return accessor;
+    }
+
+    private _self(): any {
+        return this;
+    }
 
     // ============ 初始化 ============
 
@@ -49,14 +78,15 @@ class TabManagerMixin {
         }
 
         // 初始化数据存储
-        TabManagerMixin._serviceMap.set(this, new EditorTabService(this));
+        TabManagerMixin._serviceMap.set(this, new EditorTabService(this._self()));
         TabManagerMixin._groupsMap.set(this, new Map());
         TabManagerMixin._expandStatesMap.set(this, new Map());
         TabManagerMixin._initializedMap.set(this, true);
 
         // 绑定 C++ 刷新事件
-        if (this.OnTabsChanged) {
-            this.OnTabsChanged.Add(() => {
+        const self = this._self();
+        if (self.OnTabsChanged) {
+            self.OnTabsChanged.Add(() => {
                 this.syncWithEditor();
             });
         }
@@ -75,6 +105,7 @@ class TabManagerMixin {
         TabManagerMixin._groupsMap.delete(this);
         TabManagerMixin._expandStatesMap.delete(this);
         TabManagerMixin._initializedMap.delete(this);
+        TabManagerMixin._accessorMap.delete(this);
 
         console.log('[VerticalTabs] TabManager cleaned up');
     }
@@ -98,7 +129,7 @@ class TabManagerMixin {
         const groups = service.getGroupedTabs();
 
         // 获取容器
-        const groupContainer = this.GetWidgetFromName("GroupContainer") as UE.VerticalBox;
+        const groupContainer = this._accessor().getSilent('GroupContainer');
         if (!groupContainer) {
             console.warn('[TabManager] GroupContainer not found');
             return;
@@ -117,26 +148,26 @@ class TabManagerMixin {
 
             // 创建分组 Widget
             const groupWidget = UE.WidgetBlueprintLibrary.Create(
-                this,
+                this._self(),
                 WBP_TabGroupWithMixin.StaticClass(),
                 null
-            ) as TabGroupWidget;
+            ) as any;
 
             // 设置数据
             groupWidget.setGroupData(groupData);
 
             // 设置回调
             groupWidget.setCallbacks({
-                onToggle: (g, exp) => {
+                onToggle: (g: ITabGroupData, exp: boolean) => {
                     // 记住展开状态
                     expandStates.set(g.groupId, exp);
                 },
-                onTabClick: (tab) => {
+                onTabClick: (tab: IEditorTabInfo) => {
                     // 激活标签
                     service.activateTab(tab.tabId);
                     console.log(`[VerticalTabs] Activated: ${tab.displayName}`);
                 },
-                onTabClose: (tab) => {
+                onTabClose: (tab: IEditorTabInfo) => {
                     // 关闭标签
                     service.closeTab(tab.tabId);
                     console.log(`[VerticalTabs] Closed: ${tab.displayName}`);
@@ -194,7 +225,10 @@ class TabManagerMixin {
      * 保存所有修改
      */
     saveAll(): void {
-        this.SaveAllDirtyAssets_EditorOnly();
+        const self = this._self();
+        if (self.SaveAllDirtyAssets_EditorOnly) {
+            self.SaveAllDirtyAssets_EditorOnly();
+        }
         this.refresh();
     }
 
@@ -232,9 +266,17 @@ class TabManagerMixin {
 // ============================================================
 // 4. 执行 Mixin
 // ============================================================
-export const EDU_OpenedEditorWithMixin = blueprint.mixin(EDU_OpenedEditor, TabManagerMixin);
+export const EDU_OpenedEditorWithMixin = EDU_OpenedEditor
+    ? blueprint.mixin(EDU_OpenedEditor, TabManagerMixin)
+    : null;
+
+if (EDU_OpenedEditorWithMixin) {
+    console.log(`[${CLASS_NAME}] Mixin 成功`);
+} else {
+    console.error(`[${CLASS_NAME}] Mixin 失败，请检查蓝图路径`);
+}
 
 // ============================================================
-// 5. 导出类型
+// 5. 导出
 // ============================================================
 export type TabManagerWidget = InstanceType<typeof EDU_OpenedEditorWithMixin>;

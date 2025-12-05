@@ -2,17 +2,41 @@ import * as UE from 'ue';
 import { blueprint } from 'puerts';
 import { IEditorTabInfo, ITabGroupData } from './Types';
 import { WBP_TabItemWithMixin, TabItemWidget } from './TabItemMixin';
+import {
+    registerWidgetComponents,
+    createWidgetAccessor,
+    required,
+    optional
+} from './WidgetHelper';
 
 // ============================================================
-// 1. 加载蓝图类
+// 配置
 // ============================================================
-const tabGroupCls = UE.Class.Load('/VerticalWindows/Editor/WBP_TabGroup.WBP_TabGroup_C');
-const WBP_TabGroup = blueprint.tojs<any>(tabGroupCls);
+
+const CLASS_NAME = 'WBP_TabGroup';
+const BLUEPRINT_PATH = '/VerticalWindows/Editor/WBP_TabGroup';
 
 // ============================================================
-// 2. interface 扩展
+// 1. 注册组件需求
 // ============================================================
-interface TabGroupMixin extends UE.UserWidget {}
+registerWidgetComponents(CLASS_NAME, BLUEPRINT_PATH, [
+    required('HeaderButton',   'Button',      '分组头部点击区域'),
+    required('GroupNameText',  'TextBlock',   '分组名称'),
+    required('ItemContainer',  'VerticalBox', '子标签项容器'),
+    required('ColorBar',       'Image',       '颜色条'),
+    optional('ExpandIcon',     'Image',       '展开/折叠箭头图标'),
+    optional('CountText',      'TextBlock',   '标签数量显示'),
+]);
+
+// ============================================================
+// 2. 加载蓝图类
+// ============================================================
+const tabGroupCls = UE.Class.Load(`${BLUEPRINT_PATH}.${CLASS_NAME}_C`);
+if (!tabGroupCls) {
+    console.error(`[${CLASS_NAME}] 无法加载蓝图类: ${BLUEPRINT_PATH}.${CLASS_NAME}_C`);
+    console.error(`请确保蓝图文件存在于正确路径`);
+}
+const WBP_TabGroup = tabGroupCls ? blueprint.tojs<any>(tabGroupCls) : null;
 
 // ============================================================
 // 3. Mixin 类定义
@@ -20,12 +44,28 @@ interface TabGroupMixin extends UE.UserWidget {}
 class TabGroupMixin {
     // WeakMap 存储数据
     private static _dataMap = new WeakMap<object, ITabGroupData>();
-    private static _tabsMap = new WeakMap<object, Map<string, TabItemWidget>>();
+    private static _tabsMap = new WeakMap<object, Map<string, any>>();
     private static _callbackMap = new WeakMap<object, {
         onToggle?: (group: ITabGroupData, expanded: boolean) => void;
         onTabClick?: (tab: IEditorTabInfo) => void;
         onTabClose?: (tab: IEditorTabInfo) => void;
     }>();
+    private static _accessorMap = new WeakMap<object, ReturnType<typeof createWidgetAccessor>>();
+
+    // ============ 辅助方法 ============
+
+    private _accessor() {
+        let accessor = TabGroupMixin._accessorMap.get(this);
+        if (!accessor) {
+            accessor = createWidgetAccessor(this, CLASS_NAME);
+            TabGroupMixin._accessorMap.set(this, accessor);
+        }
+        return accessor;
+    }
+
+    private _self(): any {
+        return this;
+    }
 
     // ============ 数据方法 ============
 
@@ -66,11 +106,8 @@ class TabGroupMixin {
         const data = this.getGroupData();
         if (!data) return;
 
-        const itemContainer = this.GetWidgetFromName("ItemContainer") as UE.VerticalBox;
-        if (!itemContainer) {
-            console.warn('[TabGroup] ItemContainer not found');
-            return;
-        }
+        const itemContainer = this._accessor().getSilent('ItemContainer');
+        if (!itemContainer) return;
 
         // 清空
         itemContainer.ClearChildren();
@@ -90,7 +127,7 @@ class TabGroupMixin {
      */
     private _createTabWidget(
         tabData: IEditorTabInfo,
-        container: UE.VerticalBox,
+        container: any,
         callbacks?: {
             onTabClick?: (tab: IEditorTabInfo) => void;
             onTabClose?: (tab: IEditorTabInfo) => void;
@@ -101,18 +138,18 @@ class TabGroupMixin {
 
         // 创建实例
         const tabWidget = UE.WidgetBlueprintLibrary.Create(
-            this,
+            this._self(),
             WBP_TabItemWithMixin.StaticClass(),
             null
-        ) as TabItemWidget;
+        ) as any;
 
         // 设置数据和回调
         tabWidget.setTabData(tabData);
         tabWidget.setCallbacks(
-            (tab) => {
+            (tab: IEditorTabInfo) => {
                 if (callbacks?.onTabClick) callbacks.onTabClick(tab);
             },
-            (tab) => {
+            (tab: IEditorTabInfo) => {
                 this.removeTab(tab.tabId);
                 if (callbacks?.onTabClose) callbacks.onTabClose(tab);
             }
@@ -136,7 +173,7 @@ class TabGroupMixin {
 
         data.tabs.push(tab);
 
-        const itemContainer = this.GetWidgetFromName("ItemContainer") as UE.VerticalBox;
+        const itemContainer = this._accessor().getSilent('ItemContainer');
         const callbacks = TabGroupMixin._callbackMap.get(this);
 
         if (itemContainer) {
@@ -179,7 +216,7 @@ class TabGroupMixin {
 
         if (data) data.tabs = [];
 
-        const itemContainer = this.GetWidgetFromName("ItemContainer") as UE.VerticalBox;
+        const itemContainer = this._accessor().getSilent('ItemContainer');
         if (itemContainer) itemContainer.ClearChildren();
 
         if (tabsMap) tabsMap.clear();
@@ -198,8 +235,10 @@ class TabGroupMixin {
 
         data.expanded = expanded;
 
+        const $ = this._accessor();
+
         // 更新容器可见性
-        const itemContainer = this.GetWidgetFromName("ItemContainer") as UE.VerticalBox;
+        const itemContainer = $.getSilent('ItemContainer');
         if (itemContainer) {
             itemContainer.SetVisibility(
                 expanded ? UE.ESlateVisibility.Visible : UE.ESlateVisibility.Collapsed
@@ -239,20 +278,22 @@ class TabGroupMixin {
         const data = this.getGroupData();
         if (!data) return;
 
+        const $ = this._accessor();
+
         // 分组名
-        const groupNameText = this.GetWidgetFromName("GroupNameText") as UE.TextBlock;
+        const groupNameText = $.getSilent('GroupNameText');
         if (groupNameText) {
             groupNameText.SetText(data.groupName);
         }
 
         // 颜色条
-        const colorBar = this.GetWidgetFromName("ColorBar") as UE.Image;
+        const colorBar = $.getSilent('ColorBar');
         if (colorBar && data.color) {
             colorBar.SetColorAndOpacity(data.color);
         }
 
         // 容器可见性
-        const itemContainer = this.GetWidgetFromName("ItemContainer") as UE.VerticalBox;
+        const itemContainer = $.getSilent('ItemContainer');
         if (itemContainer) {
             itemContainer.SetVisibility(
                 data.expanded ? UE.ESlateVisibility.Visible : UE.ESlateVisibility.Collapsed
@@ -271,7 +312,7 @@ class TabGroupMixin {
      */
     private _updateExpandIcon(): void {
         const data = this.getGroupData();
-        const expandIcon = this.GetWidgetFromName("ExpandIcon") as UE.Image;
+        const expandIcon = this._accessor().getSilent('ExpandIcon');
 
         if (expandIcon && data) {
             const transform = new UE.WidgetTransform();
@@ -284,7 +325,7 @@ class TabGroupMixin {
      * 更新计数显示
      */
     private _updateCount(): void {
-        const countText = this.GetWidgetFromName("CountText") as UE.TextBlock;
+        const countText = this._accessor().getSilent('CountText');
         if (countText) {
             countText.SetText(`(${this.getTabCount()})`);
         }
@@ -303,9 +344,17 @@ class TabGroupMixin {
 // ============================================================
 // 4. 执行 Mixin
 // ============================================================
-export const WBP_TabGroupWithMixin = blueprint.mixin(WBP_TabGroup, TabGroupMixin);
+export const WBP_TabGroupWithMixin = WBP_TabGroup
+    ? blueprint.mixin(WBP_TabGroup, TabGroupMixin)
+    : null;
+
+if (WBP_TabGroupWithMixin) {
+    console.log(`[${CLASS_NAME}] Mixin 成功`);
+} else {
+    console.error(`[${CLASS_NAME}] Mixin 失败，请检查蓝图路径`);
+}
 
 // ============================================================
-// 5. 导出类型
+// 5. 导出
 // ============================================================
 export type TabGroupWidget = InstanceType<typeof WBP_TabGroupWithMixin>;
