@@ -9,21 +9,22 @@ class UWidgetSwitcher;
 class UImage;
 class UTextBlock;
 class UButton;
-class UTabSelectionManager;
+class UTabManager;
 class UTabDragDropOperation;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabItemClicked, const FEditorTabInfo&, TabInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabItemClosed, const FEditorTabInfo&, TabInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabItemHovered, const FEditorTabInfo&, TabInfo);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabItemUnhovered, const FEditorTabInfo&, TabInfo);
-
-// ============ NEW: Additional delegates ============
+// 保留事件用于特殊情况（如右键菜单需要UI处理）
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabItemRightClicked, const FEditorTabInfo&, TabInfo, FVector2D, ScreenPosition);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTabItemDragStarted, const FEditorTabInfo&, TabInfo);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTabItemDragEnded, const FEditorTabInfo&, TabInfo, bool, bDropped);
 
 /**
- * Vertical Tab - Single Tab Item Base Class
+ * Tab Item Widget - 单个标签项
+ * 
+ * 方案B设计:
+ * - Widget 本身接收鼠标事件 (Visibility: Visible)
+ * - 移除 RootButton，使用 Native 鼠标事件处理点击
+ * - 只保留 CloseButton 单独处理关闭
+ * - 直接持有 TabManager 引用，操作直接调用 Manager
  */
 UCLASS(BlueprintType, Blueprintable)
 class VERTICALWINDOWS_API UTabItemWidget : public UUserWidget
@@ -31,58 +32,53 @@ class VERTICALWINDOWS_API UTabItemWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// ============ Data ============
+	// ============ 数据 ============
 
 	UPROPERTY(BlueprintReadOnly, Category = "Tab Item")
 	FEditorTabInfo TabData;
 
-	// ============ NEW: Item State ============
-
 	UPROPERTY(BlueprintReadOnly, Category = "Tab Item")
 	ETabItemState CurrentState = ETabItemState::Normal;
 
-	// ============ Component Bindings (Native) ============
+	// ============ Manager 引用 ============
 
-	/** Widget switcher for selected/unselected background */
+	/** Tab Manager - 所有操作的入口 */
+	UPROPERTY(BlueprintReadWrite, Category = "Tab Item")
+	TWeakObjectPtr<UTabManager> TabManager;
+
+	// ============ 组件绑定 ============
+
+	/** 背景切换器 (普通/选中状态) */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UWidgetSwitcher* BGWidgetSwitcher;
 
-	/** Background when not selected */
+	/** 普通状态背景 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UImage* NoHoveredBG;
 
-	/** Background when selected */
+	/** 选中/悬停状态背景 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UImage* Background;
 
-	/** Main clickable button */
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UButton* RootButton;
-
-	/** Asset type icon */
+	/** 资产图标 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UImage* IconImage;
 
-	/** Display name text */
+	/** 显示名称 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UTextBlock* ItemText;
 
-	// ============ Event Callbacks (Original) ============
+	/** 脏标记 (星号) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	UTextBlock* DirtyIndicator;
 
-	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
-	FOnTabItemClicked OnClicked;
+	/** 关闭按钮 - 单独处理关闭点击 */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	UButton* CloseButton;
 
-	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
-	FOnTabItemClosed OnClosed;
+	// ============ 保留的事件（特殊情况） ============
 
-	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
-	FOnTabItemHovered OnHovered;
-
-	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
-	FOnTabItemUnhovered OnUnhovered;
-
-	// ============ NEW: Additional Event Callbacks ============
-
+	/** 右键点击 - 需要UI层处理菜单显示 */
 	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
 	FOnTabItemRightClicked OnRightClicked;
 
@@ -92,68 +88,59 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Tab Item")
 	FOnTabItemDragEnded OnDragEnded;
 
-	// ============ NEW: Selection Manager Reference ============
+	// ============ 拖拽设置 ============
 
-	UPROPERTY(BlueprintReadWrite, Category = "Tab Item")
-	TWeakObjectPtr<UTabSelectionManager> SelectionManager;
-
-	// ============ NEW: Drag Settings ============
-
-	/** Time to hold before drag starts (seconds) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tab Item|Drag")
 	float DragHoldTime = 0.3f;
 
-	/** Is drag currently in progress */
 	UPROPERTY(BlueprintReadOnly, Category = "Tab Item|Drag")
 	bool bIsDragging = false;
 
-	// ============ Methods (Original) ============
+	// ============ 设置方法 ============
 
-	/** Set data and refresh UI */
+	/** 设置 Manager */
+	UFUNCTION(BlueprintCallable, Category = "Tab Item")
+	void SetTabManager(UTabManager* Manager);
+
+	/** 设置数据并刷新UI */
 	UFUNCTION(BlueprintCallable, Category = "Tab Item")
 	void SetTabData(const FEditorTabInfo& InData);
 
-	/** Toggle selection state */
+	/** 设置选中状态 */
 	UFUNCTION(BlueprintCallable, Category = "Tab Item")
 	void SetIsSelected(bool bSelected);
 
-	/** Blueprint-implemented UI refresh logic */
-	UFUNCTION(BlueprintNativeEvent, Category = "Tab Item")
-	void OnDataUpdated();
-
-	/** Blueprint-implemented selection state update */
-	UFUNCTION(BlueprintNativeEvent, Category = "Tab Item")
-	void OnSelectionStateChanged(bool bSelected);
-
-	// ============ NEW: Additional Methods ============
-
-	/** Set the item visual state */
+	/** 设置视觉状态 */
 	UFUNCTION(BlueprintCallable, Category = "Tab Item")
 	void SetItemState(ETabItemState NewState);
 
-	/** Get current item index in parent container */
+	/** 获取当前索引 */
 	UFUNCTION(BlueprintPure, Category = "Tab Item")
 	int32 GetItemIndex() const;
 
-	/** Set selection manager */
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
-	void SetSelectionManager(UTabSelectionManager* Manager);
-
-	/** Cancel any pending drag operation */
+	/** 取消拖拽 */
 	UFUNCTION(BlueprintCallable, Category = "Tab Item")
 	void CancelDrag();
 
-	// ============ NEW: Blueprint Events for state changes ============
+	// ============ 蓝图事件 ============
 
-	/** Called when item state changes */
+	/** 数据更新时调用 */
+	UFUNCTION(BlueprintNativeEvent, Category = "Tab Item")
+	void OnDataUpdated();
+
+	/** 选中状态变化时调用 */
+	UFUNCTION(BlueprintNativeEvent, Category = "Tab Item")
+	void OnSelectionStateChanged(bool bSelected);
+
+	/** 视觉状态变化时调用 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tab Item")
 	void OnItemStateChanged(ETabItemState NewState);
 
-	/** Called when drag starts */
+	/** 拖拽开始时调用 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tab Item")
 	void OnDragStartedEvent();
 
-	/** Called when drag ends */
+	/** 拖拽结束时调用 */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Tab Item")
 	void OnDragEndedEvent(bool bDropped);
 
@@ -162,41 +149,40 @@ protected:
 	virtual void NativeDestruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
-	// ============ NEW: Mouse Event Overrides for drag/right-click ============
+	// ============ 鼠标事件重写 (方案B核心) ============
 
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 	virtual void NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 
-	// ============ UI Event Bindings (Original) ============
+	// ============ 内部处理 ============
 
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
+	/** 处理点击（左键释放时） */
 	void HandleItemClicked();
 
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
+	/** 处理关闭按钮点击 */
+	UFUNCTION()
 	void HandleCloseClicked();
 
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
-	void HandleHovered();
-
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
-	void HandleUnhovered();
-
-	// ============ NEW: Additional handlers ============
-
-	/** Handle right click */
-	UFUNCTION(BlueprintCallable, Category = "Tab Item")
+	/** 处理右键点击 */
 	void HandleRightClicked(FVector2D ScreenPosition);
 
-	/** Start drag operation */
+	/** 处理悬停进入 */
+	void HandleHovered();
+
+	/** 处理悬停离开 */
+	void HandleUnhovered();
+
+	/** 开始拖拽操作 */
 	void StartDragOperation();
 
 private:
-	void BindButtonEvents();
+	void BindCloseButton();
 
-	// ============ NEW: Drag tracking ============
-
+	// 拖拽跟踪
 	bool bMouseDownForDrag = false;
 	float MouseDownTime = 0.0f;
 	FVector2D MouseDownPosition;

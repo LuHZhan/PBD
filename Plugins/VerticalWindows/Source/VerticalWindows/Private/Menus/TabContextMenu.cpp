@@ -1,6 +1,6 @@
 #include "TabContextMenu.h"
-#include "EUW_Windows.h"
-#include "TabCommands.h"
+#include "TabManager.h"
+#include "TabGroupSubMenu.h"
 #include "Components/VerticalBox.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 
@@ -9,9 +9,9 @@ void UTabContextMenu::NativeConstruct()
 	Super::NativeConstruct();
 }
 
-void UTabContextMenu::InitializeMenu(UEUW_Windows* Windows, const TArray<FEditorTabInfo>& Tabs)
+void UTabContextMenu::InitializeMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs)
 {
-	WindowsRef = Windows;
+	TabManagerRef = Manager;
 	TargetTabs = Tabs;
 	bIsMultiSelection = Tabs.Num() > 1;
 
@@ -22,13 +22,20 @@ void UTabContextMenu::InitializeMenu(UEUW_Windows* Windows, const TArray<FEditor
 
 void UTabContextMenu::ShowAtPosition(FVector2D ScreenPosition)
 {
-	// Set position - implement in Blueprint for proper viewport handling
 	SetPositionInViewport(ScreenPosition, false);
 	SetVisibility(ESlateVisibility::Visible);
 }
 
 void UTabContextMenu::CloseMenu()
 {
+	// 关闭子菜单
+	if (ActiveGroupSubMenu)
+	{
+		ActiveGroupSubMenu->CloseSubMenu();
+		ActiveGroupSubMenu->RemoveFromParent();
+		ActiveGroupSubMenu = nullptr;
+	}
+	
 	SetVisibility(ESlateVisibility::Collapsed);
 	OnMenuClosed.Broadcast();
 }
@@ -68,7 +75,7 @@ void UTabContextMenu::BuildMenuItems()
 	SaveItem.bEnabled = bHasDirty;
 	MenuItems.Add(SaveItem);
 
-	// Browse to asset (only for single selection)
+	// Browse (only for single selection)
 	if (!bIsMultiSelection)
 	{
 		FTabMenuItemData BrowseItem;
@@ -78,7 +85,7 @@ void UTabContextMenu::BuildMenuItems()
 		MenuItems.Add(BrowseItem);
 	}
 
-	// Add to group (has submenu)
+	// Add to group
 	FTabMenuItemData AddToGroupItem;
 	AddToGroupItem.ItemId = TEXT("AddToGroup");
 	AddToGroupItem.DisplayText = FText::FromString(TEXT("Add to Group"));
@@ -120,61 +127,61 @@ void UTabContextMenu::ExecuteMenuAction(const FString& ActionId)
 
 void UTabContextMenu::MenuAction_Open()
 {
-	if (!WindowsRef.IsValid()) return;
+	if (!TabManagerRef.IsValid()) return;
 
-	UTabOpenCommand* Command = UTabOpenCommand::Create(WindowsRef.Get(), TargetTabs);
-	if (Command)
-	{
-		Command->Execute();
-	}
-
+	TabManagerRef->OpenTabs(TargetTabs);
 	CloseMenu();
 }
 
 void UTabContextMenu::MenuAction_Close()
 {
-	if (!WindowsRef.IsValid()) return;
+	if (!TabManagerRef.IsValid()) return;
 
-	UTabCloseCommand* Command = UTabCloseCommand::Create(WindowsRef.Get(), TargetTabs);
-	if (Command)
-	{
-		Command->Execute();
-	}
-
+	TabManagerRef->CloseTabs(TargetTabs);
 	CloseMenu();
 }
 
 void UTabContextMenu::MenuAction_Save()
 {
-	if (!WindowsRef.IsValid()) return;
+	if (!TabManagerRef.IsValid()) return;
 
-	UTabSaveCommand* Command = UTabSaveCommand::Create(WindowsRef.Get(), TargetTabs);
-	if (Command)
-	{
-		Command->Execute();
-	}
-
+	TabManagerRef->SaveTabs(TargetTabs);
 	CloseMenu();
 }
 
 void UTabContextMenu::MenuAction_BrowseToAsset()
 {
-	if (!WindowsRef.IsValid() || TargetTabs.Num() == 0) return;
+	if (!TabManagerRef.IsValid() || TargetTabs.Num() == 0) return;
 
-	UTabBrowseCommand* Command = UTabBrowseCommand::Create(WindowsRef.Get(), TargetTabs[0]);
-	if (Command)
-	{
-		Command->Execute();
-	}
-
+	TabManagerRef->BrowseToAssetByInfo(TargetTabs[0]);
 	CloseMenu();
 }
 
 void UTabContextMenu::MenuAction_ShowGroupSubMenu()
 {
-	// Get cursor position for submenu
 	FVector2D MousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
-
-	// Notify Blueprint to show submenu
-	OnShowSubMenu(TEXT("GroupSubMenu"), MousePosition);
+	
+	// 如果有 GroupSubMenuClass，创建子菜单
+	if (GroupSubMenuClass && TabManagerRef.IsValid())
+	{
+		// 关闭现有子菜单
+		if (ActiveGroupSubMenu)
+		{
+			ActiveGroupSubMenu->CloseSubMenu();
+			ActiveGroupSubMenu->RemoveFromParent();
+		}
+		
+		ActiveGroupSubMenu = CreateWidget<UTabGroupSubMenu>(this, GroupSubMenuClass);
+		if (ActiveGroupSubMenu)
+		{
+			ActiveGroupSubMenu->InitializeSubMenu(TabManagerRef.Get(), TargetTabs);
+			ActiveGroupSubMenu->AddToViewport(101);
+			ActiveGroupSubMenu->ShowAtPosition(MousePosition);
+		}
+	}
+	else
+	{
+		// 蓝图处理
+		OnShowSubMenu(TEXT("GroupSubMenu"), MousePosition);
+	}
 }

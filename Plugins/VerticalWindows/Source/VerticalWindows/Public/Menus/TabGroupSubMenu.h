@@ -5,7 +5,7 @@
 #include "TabTypes.h"
 #include "TabGroupSubMenu.generated.h"
 
-class UEUW_Windows;
+class UTabManager;
 class UVerticalBox;
 class UButton;
 class UTabGroupItem;
@@ -38,7 +38,8 @@ struct FGroupMenuItemData
 
 /**
  * Tab Group SubMenu - Shows available groups to add tabs to
- * Similar to browser's "Add to group" submenu
+ * 
+ * 重构后：使用 TabManager 而不是 UEUW_Windows
  */
 UCLASS(BlueprintType, Blueprintable)
 class VERTICALWINDOWS_API UTabGroupSubMenu : public UUserWidget
@@ -56,9 +57,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Group SubMenu")
 	TArray<FGroupMenuItemData> AvailableGroups;
 
-	/** Windows reference */
+	/** Manager reference */
 	UPROPERTY(BlueprintReadOnly, Category = "Group SubMenu")
-	TWeakObjectPtr<UEUW_Windows> WindowsRef;
+	TWeakObjectPtr<UTabManager> TabManagerRef;
 
 	// ============ Component Bindings ============
 
@@ -66,7 +67,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UVerticalBox* GroupItemContainer;
 
-	/** Create new group button (顶部的创建按钮) */
+	/** Create new group button */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
 	UButton* CreateGroupButton;
 
@@ -93,9 +94,9 @@ public:
 
 	// ============ Methods ============
 
-	/** Initialize submenu */
+	/** Initialize submenu with TabManager */
 	UFUNCTION(BlueprintCallable, Category = "Group SubMenu")
-	void InitializeSubMenu(UEUW_Windows* Windows, const TArray<FEditorTabInfo>& Tabs);
+	void InitializeSubMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs);
 
 	/** Show at position */
 	UFUNCTION(BlueprintCallable, Category = "Group SubMenu")
@@ -131,7 +132,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Group SubMenu")
 	void OnSubMenuInitialized();
 
-	/** Called to populate group items (for custom Blueprint implementation) */
+	/** Called to populate group items */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Group SubMenu")
 	void OnPopulateGroupItems(const TArray<FGroupMenuItemData>& Groups);
 

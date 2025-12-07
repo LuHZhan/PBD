@@ -1,6 +1,5 @@
 #include "TabGroupSubMenu.h"
-#include "EUW_Windows.h"
-#include "TabCommands.h"
+#include "TabManager.h"
 #include "TabGroupItem.h"
 #include "TabCreateGroupDialog.h"
 #include "Components/VerticalBox.h"
@@ -17,9 +16,9 @@ void UTabGroupSubMenu::NativeConstruct()
 	}
 }
 
-void UTabGroupSubMenu::InitializeSubMenu(UEUW_Windows* Windows, const TArray<FEditorTabInfo>& Tabs)
+void UTabGroupSubMenu::InitializeSubMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs)
 {
-	WindowsRef = Windows;
+	TabManagerRef = Manager;
 	TargetTabs = Tabs;
 
 	BuildGroupList();
@@ -53,10 +52,10 @@ void UTabGroupSubMenu::BuildGroupList()
 {
 	AvailableGroups.Empty();
 
-	if (!WindowsRef.IsValid()) return;
+	if (!TabManagerRef.IsValid()) return;
 
 	// 获取已存在的群组
-	TArray<FTabGroupInfo> ExistingGroups = WindowsRef->GetGroupedTabs();
+	TArray<FTabGroupInfo> ExistingGroups = TabManagerRef->GetGroupedTabs();
 
 	for (const FTabGroupInfo& Group : ExistingGroups)
 	{
@@ -69,7 +68,7 @@ void UTabGroupSubMenu::BuildGroupList()
 	}
 
 	// 添加自定义群组（如果有）
-	TArray<FCustomTabGroup> CustomGroups = WindowsRef->GetCustomGroups();
+	TArray<FCustomTabGroup> CustomGroups = TabManagerRef->GetCustomGroups();
 	for (const FCustomTabGroup& CustomGroup : CustomGroups)
 	{
 		// 检查是否已经存在
@@ -127,16 +126,10 @@ TArray<FGroupMenuItemData> UTabGroupSubMenu::GetAvailableGroups() const
 
 void UTabGroupSubMenu::SelectGroup(const FString& GroupId)
 {
-	if (!WindowsRef.IsValid()) return;
+	if (!TabManagerRef.IsValid()) return;
 
-	// 添加标签到群组
-	UTabAddToGroupCommand* Command = UTabAddToGroupCommand::Create(
-		WindowsRef.Get(), TargetTabs, GroupId);
-
-	if (Command)
-	{
-		Command->Execute();
-	}
+	// 通过 TabManager 添加到群组
+	TabManagerRef->AddTabsToGroup(TargetTabs, GroupId);
 
 	OnGroupSelected.Broadcast(GroupId);
 	CloseSubMenu();
@@ -165,29 +158,13 @@ void UTabGroupSubMenu::ShowCreateGroupDialog()
 
 void UTabGroupSubMenu::CreateNewGroup(const FString& GroupName, FLinearColor GroupColor)
 {
-	if (!WindowsRef.IsValid() || GroupName.IsEmpty()) return;
+	if (!TabManagerRef.IsValid() || GroupName.IsEmpty()) return;
 
-	// 创建群组
-	WindowsRef->CreateCustomGroup(GroupName);
-
-	// 设置群组颜色（更新CustomGroups）
-	for (FCustomTabGroup& Group : WindowsRef->CustomGroups)
-	{
-		if (Group.GroupId == GroupName)
-		{
-			Group.Color = GroupColor;
-			break;
-		}
-	}
+	// 通过 TabManager 创建群组
+	TabManagerRef->CreateCustomGroup(GroupName, GroupColor);
 
 	// 添加标签到群组
-	UTabAddToGroupCommand* Command = UTabAddToGroupCommand::Create(
-		WindowsRef.Get(), TargetTabs, GroupName);
-
-	if (Command)
-	{
-		Command->Execute();
-	}
+	TabManagerRef->AddTabsToGroup(TargetTabs, GroupName);
 
 	OnNewGroupCreated.Broadcast(GroupName, GroupColor);
 	CloseSubMenu();

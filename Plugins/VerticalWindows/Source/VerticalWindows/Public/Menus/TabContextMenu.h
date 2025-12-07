@@ -5,8 +5,8 @@
 #include "TabTypes.h"
 #include "TabContextMenu.generated.h"
 
-class UEUW_Windows;
-class UTabCommandInvoker;
+class UTabManager;
+class UTabGroupSubMenu;
 class UButton;
 class UVerticalBox;
 
@@ -38,8 +38,11 @@ struct FTabMenuItemData
 };
 
 /**
- * Tab Context Menu - Right-click menu for tab items
- * Base class for Blueprint implementation
+ * Tab Context Menu - 右键菜单
+ * 
+ * 重构后的设计:
+ * - 使用 TabManager 而不是 UEUW_Windows
+ * - 所有操作通过 TabManager 执行
  */
 UCLASS(BlueprintType, Blueprintable)
 class VERTICALWINDOWS_API UTabContextMenu : public UUserWidget
@@ -47,27 +50,29 @@ class VERTICALWINDOWS_API UTabContextMenu : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	// ============ Data ============
+	// ============ 数据 ============
 
-	/** Target tabs for this menu */
 	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
 	TArray<FEditorTabInfo> TargetTabs;
 
-	/** Is multi-selection mode */
 	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
 	bool bIsMultiSelection;
 
-	/** Windows reference */
+	/** Manager 引用 */
 	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
-	TWeakObjectPtr<UEUW_Windows> WindowsRef;
+	TWeakObjectPtr<UTabManager> TabManagerRef;
 
-	// ============ Menu Items ============
+	// ============ 组件 ============
 
-	/** Menu items container - bind in Blueprint */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UVerticalBox* MenuItemContainer;
 
-	// ============ Events ============
+	// ============ 子菜单类引用 ============
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Context Menu|Classes")
+	TSubclassOf<UTabGroupSubMenu> GroupSubMenuClass;
+
+	// ============ 事件 ============
 
 	UPROPERTY(BlueprintAssignable, Category = "Context Menu")
 	FOnMenuClosed OnMenuClosed;
@@ -75,70 +80,64 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Context Menu")
 	FOnMenuItemClicked OnMenuItemClicked;
 
-	// ============ Methods ============
+	// ============ 方法 ============
 
-	/** Initialize menu with target tabs */
+	/** 初始化菜单 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void InitializeMenu(UEUW_Windows* Windows, const TArray<FEditorTabInfo>& Tabs);
+	void InitializeMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs);
 
-	/** Show the menu at position */
+	/** 显示在指定位置 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void ShowAtPosition(FVector2D ScreenPosition);
 
-	/** Close the menu */
+	/** 关闭菜单 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void CloseMenu();
 
-	/** Get available menu items */
+	/** 获取菜单项 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	TArray<FTabMenuItemData> GetMenuItems() const;
 
-	// ============ Menu Actions ============
+	// ============ 菜单操作 ============
 
-	/** Execute menu action by ID */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void ExecuteMenuAction(const FString& ActionId);
 
-	/** Open selected tabs */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void MenuAction_Open();
 
-	/** Close selected tabs */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void MenuAction_Close();
 
-	/** Save selected tabs */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void MenuAction_Save();
 
-	/** Browse to asset in content browser */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void MenuAction_BrowseToAsset();
 
-	/** Show add to group submenu */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void MenuAction_ShowGroupSubMenu();
 
-	// ============ Blueprint Events ============
+	// ============ 蓝图事件 ============
 
-	/** Called when menu is initialized - implement in Blueprint */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
 	void OnMenuInitialized();
 
-	/** Called to populate menu items - implement in Blueprint */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
 	void OnPopulateMenuItems(const TArray<FTabMenuItemData>& Items);
 
-	/** Called when submenu should be shown - implement in Blueprint */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
 	void OnShowSubMenu(const FString& SubMenuId, FVector2D Position);
 
 protected:
 	virtual void NativeConstruct() override;
 
-	/** Build default menu items */
 	void BuildMenuItems();
 
 	UPROPERTY()
 	TArray<FTabMenuItemData> MenuItems;
+
+	/** 活动的群组子菜单 */
+	UPROPERTY()
+	UTabGroupSubMenu* ActiveGroupSubMenu;
 };

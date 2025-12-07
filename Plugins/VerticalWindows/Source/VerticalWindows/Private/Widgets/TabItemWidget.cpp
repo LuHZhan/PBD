@@ -1,5 +1,5 @@
 #include "TabItemWidget.h"
-#include "TabSelectionManager.h"
+#include "TabManager.h"
 #include "TabDragDropOperation.h"
 #include "TabInputHandler.h"
 #include "Components/WidgetSwitcher.h"
@@ -12,21 +12,23 @@
 void UTabItemWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-	BindButtonEvents();
-
-	// Register with selection manager if available
-	if (SelectionManager.IsValid())
+	
+	// 只绑定 CloseButton
+	BindCloseButton();
+	
+	// 注册到 Manager
+	if (TabManager.IsValid())
 	{
-		SelectionManager->RegisterItemWidget(this);
+		TabManager->RegisterItemWidget(this);
 	}
 }
 
 void UTabItemWidget::NativeDestruct()
 {
-	// Unregister from selection manager
-	if (SelectionManager.IsValid())
+	// 从 Manager 注销
+	if (TabManager.IsValid())
 	{
-		SelectionManager->UnregisterItemWidget(this);
+		TabManager->UnregisterItemWidget(this);
 	}
 
 	Super::NativeDestruct();
@@ -36,14 +38,13 @@ void UTabItemWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	// Check for long press to start drag
+	// 检查长按触发拖拽
 	if (bMouseDownForDrag && !bIsDragging)
 	{
 		MouseDownTime += InDeltaTime;
 
 		if (MouseDownTime >= DragHoldTime)
 		{
-			// Check if mouse moved too much (cancel if so)
 			FVector2D CurrentPos;
 			if (FSlateApplication::IsInitialized())
 			{
@@ -57,26 +58,31 @@ void UTabItemWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 			}
 			else
 			{
+				// 鼠标移动太远，取消拖拽准备
 				bMouseDownForDrag = false;
 			}
 		}
 	}
 }
 
+// ============ 鼠标事件处理 (方案B核心) ============
+
 FReply UTabItemWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	// 注意：如果点击的是 CloseButton，这个函数不会被调用
+	// 因为 CloseButton 会先接收事件并返回 Handled
+	
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// Start tracking for potential drag
+		// 开始跟踪潜在拖拽
 		bMouseDownForDrag = true;
 		MouseDownTime = 0.0f;
 		MouseDownPosition = InMouseEvent.GetScreenSpacePosition();
-
 		return FReply::Handled();
 	}
 	else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		// Right click - show context menu
+		// 右键 - 显示菜单
 		HandleRightClicked(InMouseEvent.GetScreenSpacePosition());
 		return FReply::Handled();
 	}
@@ -90,34 +96,31 @@ FReply UTabItemWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const 
 	{
 		if (bMouseDownForDrag && !bIsDragging)
 		{
-			// This was a click, not a drag
+			// 这是点击，不是拖拽
 			bMouseDownForDrag = false;
-
-			// Handle selection with modifier keys
-			if (SelectionManager.IsValid())
-			{
-				bool bShift = UTabInputFunctionLibrary::IsShiftKeyDown();
-				bool bCtrl = UTabInputFunctionLibrary::IsCtrlKeyDown();
-
-				SelectionManager->HandleItemClick(TabData, bShift, bCtrl);
-			}
-
-			// Fire click event
 			HandleItemClicked();
-
 			return FReply::Handled();
 		}
-
 		bMouseDownForDrag = false;
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 }
 
+void UTabItemWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+	HandleHovered();
+}
+
+void UTabItemWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+	HandleUnhovered();
+}
+
 void UTabItemWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
 {
-	// This is called by UE when drag is detected via DetectDrag
-	// We handle our own drag logic in NativeTick, so this may not be used
 	Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
 }
 
@@ -132,15 +135,32 @@ void UTabItemWidget::NativeOnDragCancelled(const FDragDropEvent& InDragDropEvent
 	Super::NativeOnDragCancelled(InDragDropEvent, InOperation);
 }
 
-void UTabItemWidget::BindButtonEvents()
+// ============ 内部绑定 ============
+
+void UTabItemWidget::BindCloseButton()
 {
-	if (RootButton)
+	if (CloseButton)
 	{
-		RootButton->OnHovered.AddDynamic(this, &UTabItemWidget::HandleHovered);
-		RootButton->OnUnhovered.AddDynamic(this, &UTabItemWidget::HandleUnhovered);
-		
-		// Bind OnClicked directly as UButton consumes mouse events preventing NativeOnMouseButtonUp from firing
-		RootButton->OnClicked.AddDynamic(this, &UTabItemWidget::HandleItemClicked);
+		CloseButton->OnClicked.AddDynamic(this, &UTabItemWidget::HandleCloseClicked);
+	}
+}
+
+// ============ 设置方法 ============
+
+void UTabItemWidget::SetTabManager(UTabManager* Manager)
+{
+	// 从旧 Manager 注销
+	if (TabManager.IsValid())
+	{
+		TabManager->UnregisterItemWidget(this);
+	}
+
+	TabManager = Manager;
+
+	// 注册到新 Manager
+	if (TabManager.IsValid())
+	{
+		TabManager->RegisterItemWidget(this);
 	}
 }
 
@@ -171,7 +191,7 @@ void UTabItemWidget::SetItemState(ETabItemState NewState)
 	CurrentState = NewState;
 	OnItemStateChanged(NewState);
 
-	// Update visuals based on state
+	// 更新背景
 	if (BGWidgetSwitcher)
 	{
 		switch (NewState)
@@ -190,25 +210,7 @@ void UTabItemWidget::SetItemState(ETabItemState NewState)
 
 int32 UTabItemWidget::GetItemIndex() const
 {
-	// This would need to be set externally or queried from parent
 	return TabData.DisplayOrder;
-}
-
-void UTabItemWidget::SetSelectionManager(UTabSelectionManager* Manager)
-{
-	// Unregister from old manager
-	if (SelectionManager.IsValid())
-	{
-		SelectionManager->UnregisterItemWidget(this);
-	}
-
-	SelectionManager = Manager;
-
-	// Register with new manager
-	if (SelectionManager.IsValid())
-	{
-		SelectionManager->RegisterItemWidget(this);
-	}
 }
 
 void UTabItemWidget::CancelDrag()
@@ -216,6 +218,72 @@ void UTabItemWidget::CancelDrag()
 	bMouseDownForDrag = false;
 	bIsDragging = false;
 	MouseDownTime = 0.0f;
+}
+
+// ============ 核心事件处理（直接调用 TabManager） ============
+
+void UTabItemWidget::HandleItemClicked()
+{
+	if (!TabManager.IsValid()) return;
+
+	// 1. 先处理选择（带修饰键）
+	bool bShift = UTabInputFunctionLibrary::IsShiftKeyDown();
+	bool bCtrl = UTabInputFunctionLibrary::IsCtrlKeyDown();
+	TabManager->HandleItemClick(TabData, bShift, bCtrl);
+
+	// 2. 打开标签
+	TabManager->OpenTab(TabData);
+}
+
+void UTabItemWidget::HandleCloseClicked()
+{
+	if (!TabManager.IsValid()) return;
+
+	// 如果是多选且当前标签被选中，关闭所有选中的
+	if (TabManager->IsMultiSelection() && TabManager->IsSelected(TabData))
+	{
+		TabManager->CloseSelectedTabs();
+	}
+	else
+	{
+		TabManager->CloseTabByInfo(TabData);
+	}
+}
+
+void UTabItemWidget::HandleRightClicked(FVector2D ScreenPosition)
+{
+	if (!TabManager.IsValid()) return;
+
+	// 如果未选中，先单选
+	if (!TabManager->IsSelected(TabData))
+	{
+		bool bShift = UTabInputFunctionLibrary::IsShiftKeyDown();
+		bool bCtrl = UTabInputFunctionLibrary::IsCtrlKeyDown();
+
+		if (!bShift && !bCtrl)
+		{
+			TabManager->SelectSingle(TabData);
+		}
+	}
+
+	// 广播事件给 UI 层处理菜单显示
+	OnRightClicked.Broadcast(TabData, ScreenPosition);
+}
+
+void UTabItemWidget::HandleHovered()
+{
+	if (CurrentState != ETabItemState::Selected && CurrentState != ETabItemState::Dragging)
+	{
+		SetItemState(ETabItemState::Hovered);
+	}
+}
+
+void UTabItemWidget::HandleUnhovered()
+{
+	if (CurrentState == ETabItemState::Hovered)
+	{
+		SetItemState(ETabItemState::Normal);
+	}
 }
 
 void UTabItemWidget::StartDragOperation()
@@ -227,26 +295,25 @@ void UTabItemWidget::StartDragOperation()
 	OnDragStarted.Broadcast(TabData);
 	OnDragStartedEvent();
 
-	// Create drag operation
+	// 创建拖拽操作
 	UTabDragDropOperation* DragOp = UTabDragDropOperation::CreateTabDragOperation(
 		this, this, TabData, GetItemIndex());
 
 	if (DragOp)
 	{
-		// Start the UMG drag
 		UWidgetBlueprintLibrary::CreateDragDropOperation(UTabDragDropOperation::StaticClass());
 	}
 }
 
+// ============ 蓝图事件默认实现 ============
+
 void UTabItemWidget::OnDataUpdated_Implementation()
 {
-	// Update title text
 	if (ItemText)
 	{
 		ItemText->SetText(FText::FromString(TabData.DisplayName));
 	}
 
-	// Update background color based on group color
 	if (Background)
 	{
 		Background->SetColorAndOpacity(TabData.GroupColor);
@@ -257,69 +324,17 @@ void UTabItemWidget::OnDataUpdated_Implementation()
 		IconImage->SetBrush(TabData.IconBrush);
 		IconImage->SetColorAndOpacity(TabData.GroupColor);
 	}
+
+	if (DirtyIndicator)
+	{
+		DirtyIndicator->SetVisibility(TabData.bIsDirty ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	}
 }
 
 void UTabItemWidget::OnSelectionStateChanged_Implementation(bool bSelected)
 {
-	// Switch between selected/unselected background
 	if (BGWidgetSwitcher)
 	{
 		BGWidgetSwitcher->SetActiveWidgetIndex(bSelected ? 1 : 0);
 	}
-}
-
-void UTabItemWidget::HandleItemClicked()
-{
-	// Handle selection with modifier keys
-	
-	if (SelectionManager.IsValid())
-	{
-		bool bShift = UTabInputFunctionLibrary::IsShiftKeyDown();
-		bool bCtrl = UTabInputFunctionLibrary::IsCtrlKeyDown();
-
-		SelectionManager->HandleItemClick(TabData, bShift, bCtrl);
-	}
-
-	OnClicked.Broadcast(TabData);
-}
-
-void UTabItemWidget::HandleCloseClicked()
-{
-	OnClosed.Broadcast(TabData);
-}
-
-void UTabItemWidget::HandleHovered()
-{
-	if (CurrentState != ETabItemState::Selected && CurrentState != ETabItemState::Dragging)
-	{
-		SetItemState(ETabItemState::Hovered);
-	}
-	OnHovered.Broadcast(TabData);
-}
-
-void UTabItemWidget::HandleUnhovered()
-{
-	if (CurrentState == ETabItemState::Hovered)
-	{
-		SetItemState(ETabItemState::Normal);
-	}
-	OnUnhovered.Broadcast(TabData);
-}
-
-void UTabItemWidget::HandleRightClicked(FVector2D ScreenPosition)
-{
-	// If not already selected, select this item first
-	if (SelectionManager.IsValid() && !SelectionManager->IsSelected(TabData))
-	{
-		bool bShift = UTabInputFunctionLibrary::IsShiftKeyDown();
-		bool bCtrl = UTabInputFunctionLibrary::IsCtrlKeyDown();
-
-		if (!bShift && !bCtrl)
-		{
-			// Single selection on right click if no modifiers
-			SelectionManager->SelectSingle(TabData);
-		}
-	}
-
-	OnRightClicked.Broadcast(TabData, ScreenPosition);
 }

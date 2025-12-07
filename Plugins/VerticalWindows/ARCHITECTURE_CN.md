@@ -14,36 +14,58 @@ VerticalWindows 是一个 UE5 编辑器插件，提供垂直标签页管理器�
 
 ```mermaid
 classDiagram
+    class ITabOperations {
+        <<interface>>
+        ITabOperations.h
+        +ActivateTab() bool
+        +CloseTab() bool
+        +SaveAsset() bool
+        +BrowseToAsset() void
+        +AssignTabsToGroup() bool
+    }
+    
     class UTabCommandBase {
         <<abstract>>
+        TabCommands.h
         +Execute() bool
         +Undo() bool
         +CanUndo() bool
-        +GetCommandType() ETabCommandType
+        #OperationsRef : ITabOperations*
     }
     
     class UTabOpenCommand {
+        TabOpenCommand.h
         +Execute() 打开标签
     }
     
     class UTabCloseCommand {
+        TabCloseCommand.h
         +Execute() 关闭标签
     }
     
     class UTabSaveCommand {
+        TabSaveCommand.h
         +Execute() 保存标签
     }
     
     class UTabAddToGroupCommand {
+        TabCommands.h
         +Execute() 添加到群组
         +Undo() 可撤销
     }
     
     class UTabMoveCommand {
+        TabCommands.h
         +Execute() 移动顺序
         +Undo() 可撤销
     }
     
+    class UEUW_Windows {
+        EUW_Windows.h
+    }
+    
+    ITabOperations <|.. UEUW_Windows : implements
+    UTabCommandBase --> ITabOperations : uses
     UTabCommandBase <|-- UTabOpenCommand
     UTabCommandBase <|-- UTabCloseCommand
     UTabCommandBase <|-- UTabSaveCommand
@@ -51,10 +73,13 @@ classDiagram
     UTabCommandBase <|-- UTabMoveCommand
 ```
 
+**解耦设计**：Commands 依赖 `ITabOperations` 接口而非具体的 `UEUW_Windows` 类，打破循环依赖。
+
 **优点**：
 - 多选操作可作为单个命令执行
 - 通过 `UTabCommandInvoker` 支持撤销/重做
 - 新增操作无需修改现有代码
+- 接口隔离，便于测试和扩展
 
 ---
 
@@ -175,53 +200,63 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TB
-    subgraph Core["🔧 核心文件"]
-        Types["TabTypes.h/cpp<br/>数据结构和枚举"]
-        Commands["TabCommands.h/cpp<br/>命令模式实现"]
-        Selection["TabSelectionManager.h/cpp<br/>多选逻辑"]
-        Input["TabInputHandler.h/cpp<br/>修饰键检测"]
-        DragDrop["TabDragDropOperation.h/cpp<br/>拖放操作"]
-    end
-    
-    subgraph Widgets["🎨 控件文件"]
-        Item["TabItemWidget.h/cpp<br/>单个标签项"]
-        Group["TabGroupWidget.h/cpp<br/>标签群组容器"]
-        Windows["EUW_Windows.h/cpp<br/>主控制器"]
-    end
-    
-    subgraph Menus["📋 菜单文件"]
-        Context["TabContextMenu.h/cpp<br/>右键菜单基类"]
-        SubMenu["TabGroupSubMenu.h/cpp<br/>群组选择子菜单"]
-        GroupItem["TabGroupItem.h/cpp<br/>群组项控件"]
-        Dialog["TabCreateGroupDialog.h/cpp<br/>创建群组对话框"]
-    end
-    
-    subgraph Module["📦 模块文件"]
-        Main["VerticalWindows.h/cpp<br/>模块定义"]
-        Cmd["VerticalWindowsCommands.h/cpp"]
-        Style["VerticalWindowsStyle.h/cpp"]
+    subgraph Public["📁 Public/"]
+        subgraph Core["🔧 Core/"]
+            Types["TabTypes.h"]
+            Interface["ITabOperations.h"]
+            Commands["TabCommands.h<br/>(Base + Invoker)"]
+            OpenCmd["TabOpenCommand.h"]
+            CloseCmd["TabCloseCommand.h"]
+            SaveCmd["TabSaveCommand.h"]
+            Selection["TabSelectionManager.h"]
+            Input["TabInputHandler.h"]
+            DragDrop["TabDragDropOperation.h"]
+        end
+        
+        subgraph Widgets["🎨 Widgets/"]
+            Item["TabItemWidget.h"]
+            Group["TabGroupWidget.h"]
+            Windows["EUW_Windows.h"]
+        end
+        
+        subgraph Menus["📋 Menus/"]
+            Context["TabContextMenu.h"]
+            SubMenu["TabGroupSubMenu.h"]
+            GroupItem["TabGroupItem.h"]
+            Dialog["TabCreateGroupDialog.h"]
+        end
+        
+        subgraph Module["📦 Module"]
+            Main["VerticalWindows.h"]
+            Cmd["VerticalWindowsCommands.h"]
+            Style["VerticalWindowsStyle.h"]
+        end
     end
 ```
 
 ### 文件列表
 
-| 文件 | 说明 | 状态 |
+| 目录 | 文件 | 说明 |
 |------|------|------|
-| `TabTypes.h/cpp` | 数据结构和枚举 | ✅ |
-| `TabCommands.h/cpp` | 命令模式实现 | ✅ |
-| `TabSelectionManager.h/cpp` | 多选逻辑 | ✅ |
-| `TabDragDropOperation.h/cpp` | 拖放操作 | ✅ |
-| `TabInputHandler.h/cpp` | 修饰键检测 | ✅ |
-| `TabItemWidget.h/cpp` | 单个标签项控件 | ✅ |
-| `TabGroupWidget.h/cpp` | 标签群组容器 | ✅ |
-| `EUW_Windows.h/cpp` | 主控制器（中介者） | ✅ |
-| `TabContextMenu.h/cpp` | 右键菜单基类 | ✅ |
-| `TabGroupSubMenu.h/cpp` | 群组选择子菜单 | ✅ |
-| `TabGroupItem.h/cpp` | 群组项控件 | 🆕 |
-| `TabCreateGroupDialog.h/cpp` | 创建群组对话框 | 🆕 |
-| `VerticalWindows.h/cpp` | 模块定义 | ✅ |
-| `VerticalWindowsCommands.h/cpp` | 命令定义 | ✅ |
-| `VerticalWindowsStyle.h/cpp` | 样式定义 | ✅ |
+| **Core/** | `TabTypes.h/cpp` | 数据结构和枚举 |
+| **Core/** | `ITabOperations.h` | 🆕 操作接口（解耦用） |
+| **Core/** | `TabCommands.h/cpp` | 命令基类 + Invoker + Browse/AddToGroup/Move |
+| **Core/** | `TabOpenCommand.h/cpp` | 打开标签命令 |
+| **Core/** | `TabCloseCommand.h/cpp` | 关闭标签命令 |
+| **Core/** | `TabSaveCommand.h/cpp` | 保存标签命令 |
+| **Core/** | `TabSelectionManager.h/cpp` | 多选逻辑 |
+| **Core/** | `TabInputHandler.h/cpp` | 修饰键检测 |
+| **Core/** | `TabDragDropOperation.h/cpp` | 拖放操作 |
+| **Widgets/** | `TabItemWidget.h/cpp` | 单个标签项控件 |
+| **Widgets/** | `TabGroupWidget.h/cpp` | 标签群组容器 |
+| **Widgets/** | `EUW_Windows.h/cpp` | 主控制器（实现 ITabOperations） |
+| **Menus/** | `TabContextMenu.h/cpp` | 右键菜单基类 |
+| **Menus/** | `TabGroupSubMenu.h/cpp` | 群组选择子菜单 |
+| **Menus/** | `TabGroupItem.h/cpp` | 群组项控件 |
+| **Menus/** | `TabCreateGroupDialog.h/cpp` | 创建群组对话框 |
+| **根目录** | `VerticalWindows.h/cpp` | 模块定义 |
+| **根目录** | `VerticalWindowsCommands.h/cpp` | 命令定义 |
+| **根目录** | `VerticalWindowsStyle.h/cpp` | 样式定义 |
 
 ---
 
@@ -248,6 +283,22 @@ flowchart TB
 | `UTabMoveCommand` | 重排标签顺序（可撤销） |
 | `UTabCommandInvoker` | 执行命令，管理撤销历史 |
 
+#### UTabCommandInvoker 便捷方法
+
+| 方法 | 说明 |
+|------|------|
+| `SetOperations(ITabOperations*)` | 设置操作接口引用 |
+| `OpenTab(Tab)` | 打开单个标签 |
+| `OpenTabs(Tabs)` | 打开多个标签 |
+| `CloseTab(Tab)` | 关闭单个标签 |
+| `CloseTabs(Tabs)` | 关闭多个标签 |
+| `SaveTab(Tab)` | 保存单个标签 |
+| `SaveTabs(Tabs)` | 保存多个标签 |
+| `BrowseToAsset(Tab)` | 定位到资产 |
+| `AddToGroup(Tabs, GroupId)` | 添加标签到群组 |
+
+> **注意**：Invoker 在初始化时通过 `SetOperations()` 获取接口引用，便捷方法不再需要传递 Windows 参数。
+
 ### UI 类
 
 | 类 | 用途 |
@@ -271,27 +322,50 @@ flowchart TB
 
 ### 左键点击 → 打开标签
 
+```mermaid
+sequenceDiagram
+    participant User as 👤 用户
+    participant Item as 📄 TabItemWidget
+    participant Windows as 🎛️ EUW_Windows
+    participant Invoker as 📋 CommandInvoker
+    participant Cmd as 🔧 OpenCommand
+    
+    User->>Item: 左键点击
+    Item->>Item: HandleItemClicked()
+    Item->>Windows: OnClicked.Broadcast(TabInfo)
+    Windows->>Windows: HandleItemClicked(TabInfo)
+    Windows->>Invoker: OpenTab(this, TabInfo)
+    Invoker->>Cmd: Create(Windows, Tab)
+    Invoker->>Cmd: Execute()
+    Cmd->>Windows: ActivateTab(TabId)
+    Windows->>Windows: 打开资产编辑器
 ```
-1. UTabItemWidget::NativeOnMouseButtonUp()
-   ↓
-2. UTabInputFunctionLibrary::IsShiftKeyDown() / IsCtrlKeyDown()
-   ↓
-3. UTabSelectionManager::HandleItemClick(Tab, bShift, bCtrl)
-   ├── 如果按住 Shift: SelectRange()      // 范围选择
-   ├── 如果按住 Ctrl: ToggleSelection()   // 切换选择
-   └── 否则: SelectSingle()               // 单选
-   ↓
-4. UTabItemWidget::HandleItemClicked()
-   ↓
-5. UTabItemWidget::OnClicked.Broadcast()
-   ↓
-6. UTabGroupWidget::HandleChildItemClicked() [如果在群组内]
-   ↓
-7. UTabGroupWidget::OnItemClicked.Broadcast()
-   ↓
-8. UEUW_Windows::HandleGroupItemClicked()
-   ↓
-9. UEUW_Windows::ActivateTab()  // 打开资产编辑器
+
+### 关闭标签流程
+
+```mermaid
+sequenceDiagram
+    participant User as 👤 用户
+    participant Item as 📄 TabItemWidget
+    participant Windows as 🎛️ EUW_Windows
+    participant Selection as ✅ SelectionManager
+    participant Invoker as 📋 CommandInvoker
+    
+    User->>Item: 点击关闭按钮
+    Item->>Windows: OnClosed.Broadcast(TabInfo)
+    Windows->>Windows: HandleItemClosed(TabInfo)
+    
+    alt 多选模式
+        Windows->>Selection: IsMultiSelection()?
+        Selection-->>Windows: true
+        Windows->>Selection: GetSelectedTabs()
+        Selection-->>Windows: [Tab1, Tab2, Tab3]
+        Windows->>Invoker: CloseTabs(this, SelectedTabs)
+    else 单选模式
+        Windows->>Invoker: CloseTab(this, TabInfo)
+    end
+    
+    Invoker->>Invoker: Execute CloseCommand
 ```
 
 ### 右键点击 → 显示菜单
