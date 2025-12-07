@@ -61,30 +61,17 @@ void FVerticalWindowsModule::ShutdownModule()
 
 TSharedRef<SDockTab> FVerticalWindowsModule::OnSpawnPluginTab(const FSpawnTabArgs& SpawnTabArgs)
 {
-	// 创建 JS 环境
-	JsEnv = MakeShared<puerts::FJsEnv>(
-		std::make_unique<puerts::DefaultJSModuleLoader>(TEXT("JavaScript")),
-		std::make_shared<puerts::FDefaultLogger>(),
-		-1
-	);
-    
-	// 启动 TypeScript
-	JsEnv->Start("Editor/Tab/Main");
-    
-	UE_LOG(LogTemp, Log, TEXT("[VerticalWindows] TypeScript initialized"));
-
-	
-	//加载UMG的BP
+	// Load UMG Blueprint
 	UEditorUtilityWidgetBlueprint* UMGBP = LoadObject<UEditorUtilityWidgetBlueprint>(nullptr,
 	TEXT("/VerticalWindows/Editor/EDU_OpenedEditor.EDU_OpenedEditor"));
 
 	if (UMGBP)
 	{
-		UEditorUtilitySubsystem* Subsystem = GEditor->GetEditorSubsystem<UEditorUtilitySubsystem>();
-		Subsystem->SpawnAndRegisterTab(UMGBP);
+		// UEditorUtilitySubsystem* Subsystem = GEditor->GetEditorSubsystem<UEditorUtilitySubsystem>();
+		// Subsystem->SpawnAndRegisterTab(UMGBP); // REMOVED: potentially causing double windows
 	}
 
-	//仿照 UEditorUtilityWidgetBlueprint::CreateUtilityWidget() 再实现一遍
+	// Re-implement similar to UEditorUtilityWidgetBlueprint::CreateUtilityWidget()
 	TSharedRef<SWidget> TabWidget = SNullWidget::NullWidget;
 	{
 		UEditorUtilityWidget* CreatedUMGWidget = nullptr;
