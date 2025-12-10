@@ -140,4 +140,7 @@ private:
 
 	UPROPERTY()
 	UTabContextMenu* ActiveContextMenu;
+	
+	// 🔧 Slate Window 引用（用于编辑器菜单）
+	TWeakPtr<SWindow> ActiveMenuWindow;
 };

@@ -1,12 +1,62 @@
 #include "TabContextMenu.h"
 #include "TabManager.h"
 #include "TabGroupSubMenu.h"
-#include "Components/VerticalBox.h"
+#include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 
 void UTabContextMenu::NativeConstruct()
 {
 	Super::NativeConstruct();
+	
+	// 🔧 初始状态设置为隐藏，避免在错误位置显示
+	SetVisibility(ESlateVisibility::Collapsed);
+	
+	// 绑定所有按钮事件
+	BindButtons();
+}
+
+void UTabContextMenu::NativeDestruct()
+{
+	// 关闭子菜单
+	if (ActiveGroupSubMenu)
+	{
+		ActiveGroupSubMenu->CloseSubMenu();
+		ActiveGroupSubMenu->RemoveFromParent();
+		ActiveGroupSubMenu = nullptr;
+	}
+	
+	Super::NativeDestruct();
+}
+
+void UTabContextMenu::BindButtons()
+{
+	// 绑定必需按钮
+	if (OpenButton)
+	{
+		OpenButton->OnClicked.AddDynamic(this, &UTabContextMenu::HandleOpenClicked);
+	}
+	
+	if (SaveButton)
+	{
+		SaveButton->OnClicked.AddDynamic(this, &UTabContextMenu::HandleSaveClicked);
+	}
+	
+	if (CloseButton)
+	{
+		CloseButton->OnClicked.AddDynamic(this, &UTabContextMenu::HandleCloseClicked);
+	}
+	
+	if (GroupButton)
+	{
+		GroupButton->OnClicked.AddDynamic(this, &UTabContextMenu::HandleGroupClicked);
+	}
+	
+	// 绑定可选按钮
+	if (BrowseButton)
+	{
+		BrowseButton->OnClicked.AddDynamic(this, &UTabContextMenu::HandleBrowseClicked);
+	}
 }
 
 void UTabContextMenu::InitializeMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs)
@@ -15,15 +65,87 @@ void UTabContextMenu::InitializeMenu(UTabManager* Manager, const TArray<FEditorT
 	TargetTabs = Tabs;
 	bIsMultiSelection = Tabs.Num() > 1;
 
-	BuildMenuItems();
-	OnMenuInitialized();
-	OnPopulateMenuItems(MenuItems);
+	// 更新按钮状态
+	// UpdateButtonStates();
+	
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Initialized with %d tabs, IsMultiSelection=%d"), 
+		Tabs.Num(), bIsMultiSelection);
+}
+
+void UTabContextMenu::UpdateButtonStates()
+{
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	bool bHasValidTabs = ValidTabs.Num() > 0;
+	bool bHasDirty = HasDirtyTabs();
+	
+	// Save 按钮：只在有脏标签时启用
+	if (SaveButton)
+	{
+		SaveButton->SetIsEnabled(bHasValidTabs && bHasDirty);
+	}
+	
+	// Browse 按钮：只在单选时显示
+	if (BrowseButton)
+	{
+		if (bIsMultiSelection)
+		{
+			BrowseButton->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		else
+		{
+			BrowseButton->SetVisibility(ESlateVisibility::Visible);
+			BrowseButton->SetIsEnabled(bHasValidTabs);
+		}
+	}
+	
+	// Open, Close, Group 按钮：有有效标签时启用
+	if (OpenButton)
+	{
+		OpenButton->SetIsEnabled(bHasValidTabs);
+	}
+	
+	if (CloseButton)
+	{
+		CloseButton->SetIsEnabled(bHasValidTabs);
+	}
+	
+	if (GroupButton)
+	{
+		GroupButton->SetIsEnabled(bHasValidTabs);
+	}
+	
+	// 更新标题文本
+	if (TitleText)
+	{
+		FString TitleString;
+		if (bIsMultiSelection)
+		{
+			TitleString = FString::Printf(TEXT("Selected: %d tabs"), ValidTabs.Num());
+		}
+		else if (ValidTabs.Num() > 0)
+		{
+			TitleString = ValidTabs[0].DisplayName;
+		}
+		else
+		{
+			TitleString = TEXT("No valid tabs");
+		}
+		
+		TitleText->SetText(FText::FromString(TitleString));
+	}
+	
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Updated states: ValidTabs=%d, HasDirty=%d, IsMulti=%d"),
+		ValidTabs.Num(), bHasDirty, bIsMultiSelection);
 }
 
 void UTabContextMenu::ShowAtPosition(FVector2D ScreenPosition)
 {
+	// 在固定位置显示（屏幕空间）
 	SetPositionInViewport(ScreenPosition, false);
 	SetVisibility(ESlateVisibility::Visible);
+	
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Shown at position (%.1f, %.1f)"), 
+		ScreenPosition.X, ScreenPosition.Y);
 }
 
 void UTabContextMenu::CloseMenu()
@@ -38,127 +160,116 @@ void UTabContextMenu::CloseMenu()
 	
 	SetVisibility(ESlateVisibility::Collapsed);
 	OnMenuClosed.Broadcast();
+	
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Menu closed"));
 }
 
-void UTabContextMenu::BuildMenuItems()
+// ============ 按钮点击处理 ============
+
+void UTabContextMenu::HandleOpenClicked()
 {
-	MenuItems.Empty();
-
-	// Open
-	FTabMenuItemData OpenItem;
-	OpenItem.ItemId = TEXT("Open");
-	OpenItem.DisplayText = FText::FromString(TEXT("Open"));
-	OpenItem.bEnabled = true;
-	MenuItems.Add(OpenItem);
-
-	// Close
-	FTabMenuItemData CloseItem;
-	CloseItem.ItemId = TEXT("Close");
-	CloseItem.DisplayText = FText::FromString(TEXT("Close"));
-	CloseItem.bEnabled = true;
-	MenuItems.Add(CloseItem);
-
-	// Save (only if dirty)
-	bool bHasDirty = false;
-	for (const FEditorTabInfo& Tab : TargetTabs)
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Open clicked"));
+	
+	if (!TabManagerRef.IsValid())
 	{
-		if (Tab.bIsDirty)
-		{
-			bHasDirty = true;
-			break;
-		}
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] TabManager is invalid"));
+		return;
 	}
 
-	FTabMenuItemData SaveItem;
-	SaveItem.ItemId = TEXT("Save");
-	SaveItem.DisplayText = FText::FromString(TEXT("Save"));
-	SaveItem.bEnabled = bHasDirty;
-	MenuItems.Add(SaveItem);
-
-	// Browse (only for single selection)
-	if (!bIsMultiSelection)
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	
+	if (ValidTabs.Num() > 0)
 	{
-		FTabMenuItemData BrowseItem;
-		BrowseItem.ItemId = TEXT("BrowseToAsset");
-		BrowseItem.DisplayText = FText::FromString(TEXT("Browse to Asset"));
-		BrowseItem.bEnabled = true;
-		MenuItems.Add(BrowseItem);
+		TabManagerRef->OpenTabs(ValidTabs);
+		OnMenuItemClicked.Broadcast(TEXT("Open"));
 	}
-
-	// Add to group
-	FTabMenuItemData AddToGroupItem;
-	AddToGroupItem.ItemId = TEXT("AddToGroup");
-	AddToGroupItem.DisplayText = FText::FromString(TEXT("Add to Group"));
-	AddToGroupItem.bHasSubMenu = true;
-	AddToGroupItem.bEnabled = true;
-	MenuItems.Add(AddToGroupItem);
-}
-
-TArray<FTabMenuItemData> UTabContextMenu::GetMenuItems() const
-{
-	return MenuItems;
-}
-
-void UTabContextMenu::ExecuteMenuAction(const FString& ActionId)
-{
-	if (ActionId == TEXT("Open"))
+	else
 	{
-		MenuAction_Open();
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] No valid tabs to open"));
 	}
-	else if (ActionId == TEXT("Close"))
-	{
-		MenuAction_Close();
-	}
-	else if (ActionId == TEXT("Save"))
-	{
-		MenuAction_Save();
-	}
-	else if (ActionId == TEXT("BrowseToAsset"))
-	{
-		MenuAction_BrowseToAsset();
-	}
-	else if (ActionId == TEXT("AddToGroup"))
-	{
-		MenuAction_ShowGroupSubMenu();
-	}
-
-	OnMenuItemClicked.Broadcast(ActionId);
-}
-
-void UTabContextMenu::MenuAction_Open()
-{
-	if (!TabManagerRef.IsValid()) return;
-
-	TabManagerRef->OpenTabs(TargetTabs);
+	
 	CloseMenu();
 }
 
-void UTabContextMenu::MenuAction_Close()
+void UTabContextMenu::HandleSaveClicked()
 {
-	if (!TabManagerRef.IsValid()) return;
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Save clicked"));
+	
+	if (!TabManagerRef.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] TabManager is invalid"));
+		return;
+	}
 
-	TabManagerRef->CloseTabs(TargetTabs);
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	
+	if (ValidTabs.Num() > 0)
+	{
+		TabManagerRef->SaveTabs(ValidTabs);
+		OnMenuItemClicked.Broadcast(TEXT("Save"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] No valid tabs to save"));
+	}
+	
 	CloseMenu();
 }
 
-void UTabContextMenu::MenuAction_Save()
+void UTabContextMenu::HandleCloseClicked()
 {
-	if (!TabManagerRef.IsValid()) return;
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Close clicked"));
+	
+	if (!TabManagerRef.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] TabManager is invalid"));
+		return;
+	}
 
-	TabManagerRef->SaveTabs(TargetTabs);
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	
+	if (ValidTabs.Num() > 0)
+	{
+		TabManagerRef->CloseTabs(ValidTabs);
+		OnMenuItemClicked.Broadcast(TEXT("Close"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] No valid tabs to close"));
+	}
+	
 	CloseMenu();
 }
 
-void UTabContextMenu::MenuAction_BrowseToAsset()
+void UTabContextMenu::HandleBrowseClicked()
 {
-	if (!TabManagerRef.IsValid() || TargetTabs.Num() == 0) return;
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Browse clicked"));
+	
+	if (!TabManagerRef.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] TabManager is invalid"));
+		return;
+	}
 
-	TabManagerRef->BrowseToAssetByInfo(TargetTabs[0]);
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	
+	if (ValidTabs.Num() > 0)
+	{
+		TabManagerRef->BrowseToAssetByInfo(ValidTabs[0]);
+		OnMenuItemClicked.Broadcast(TEXT("Browse"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] No valid tab to browse"));
+	}
+	
 	CloseMenu();
 }
 
-void UTabContextMenu::MenuAction_ShowGroupSubMenu()
+void UTabContextMenu::HandleGroupClicked()
 {
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Group clicked"));
+	
 	FVector2D MousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
 	
 	// 如果有 GroupSubMenuClass，创建子菜单
@@ -171,17 +282,76 @@ void UTabContextMenu::MenuAction_ShowGroupSubMenu()
 			ActiveGroupSubMenu->RemoveFromParent();
 		}
 		
-		ActiveGroupSubMenu = CreateWidget<UTabGroupSubMenu>(this, GroupSubMenuClass);
-		if (ActiveGroupSubMenu)
+		TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+		
+		if (ValidTabs.Num() > 0)
 		{
-			ActiveGroupSubMenu->InitializeSubMenu(TabManagerRef.Get(), TargetTabs);
-			ActiveGroupSubMenu->AddToViewport(101);
-			ActiveGroupSubMenu->ShowAtPosition(MousePosition);
+			ActiveGroupSubMenu = CreateWidget<UTabGroupSubMenu>(this, GroupSubMenuClass);
+			if (ActiveGroupSubMenu)
+			{
+				ActiveGroupSubMenu->InitializeSubMenu(TabManagerRef.Get(), ValidTabs);
+				ActiveGroupSubMenu->AddToViewport(101);
+				ActiveGroupSubMenu->ShowAtPosition(MousePosition);
+				
+				OnMenuItemClicked.Broadcast(TEXT("Group"));
+				
+				UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Group submenu shown"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] No valid tabs for group submenu"));
 		}
 	}
 	else
 	{
-		// 蓝图处理
-		OnShowSubMenu(TEXT("GroupSubMenu"), MousePosition);
+		UE_LOG(LogTemp, Warning, TEXT("[TabContextMenu] GroupSubMenuClass not set or TabManager invalid"));
 	}
+}
+
+// ============ 辅助方法 ============
+
+TArray<FEditorTabInfo> UTabContextMenu::GetValidTabs() const
+{
+	if (!TabManagerRef.IsValid())
+	{
+		return TArray<FEditorTabInfo>();
+	}
+
+	// 获取当前所有打开的 Tab
+	TArray<FEditorTabInfo> AllCurrentTabs = TabManagerRef->GetAllTabs();
+	
+	// 创建一个 TabId 的集合用于快速查找
+	TSet<FString> CurrentTabIds;
+	for (const FEditorTabInfo& Tab : AllCurrentTabs)
+	{
+		CurrentTabIds.Add(Tab.TabId);
+	}
+
+	// 过滤出仍然存在的 Tab
+	TArray<FEditorTabInfo> ValidTabs;
+	for (const FEditorTabInfo& Tab : TargetTabs)
+	{
+		if (CurrentTabIds.Contains(Tab.TabId))
+		{
+			ValidTabs.Add(Tab);
+		}
+	}
+
+	return ValidTabs;
+}
+
+bool UTabContextMenu::HasDirtyTabs() const
+{
+	TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
+	
+	for (const FEditorTabInfo& Tab : ValidTabs)
+	{
+		if (Tab.bIsDirty)
+		{
+			return true;
+		}
+	}
+	
+	return false;
 }

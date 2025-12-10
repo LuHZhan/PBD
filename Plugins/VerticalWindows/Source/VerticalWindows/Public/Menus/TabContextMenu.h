@@ -8,41 +8,18 @@
 class UTabManager;
 class UTabGroupSubMenu;
 class UButton;
-class UVerticalBox;
+class UTextBlock;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMenuClosed);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMenuItemClicked, const FString&, MenuItemId);
 
 /**
- * Menu Item Data
- */
-USTRUCT(BlueprintType)
-struct FTabMenuItemData
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	FString ItemId;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	FText DisplayText;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	bool bHasSubMenu = false;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	bool bEnabled = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
-	FString SubMenuWidgetClass;
-};
-
-/**
  * Tab Context Menu - 右键菜单
  * 
- * 重构后的设计:
- * - 使用 TabManager 而不是 UEUW_Windows
- * - 所有操作通过 TabManager 执行
+ * 设计原则:
+ * - 蓝图只负责搭建UI（摆放按钮、设置样式）
+ * - C++ 负责所有逻辑（绑定事件、状态管理、操作执行）
+ * - 通过 BindWidget 自动关联蓝图中的组件
  */
 UCLASS(BlueprintType, Blueprintable)
 class VERTICALWINDOWS_API UTabContextMenu : public UUserWidget
@@ -50,6 +27,34 @@ class VERTICALWINDOWS_API UTabContextMenu : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	// ============ UI 组件（通过 BindWidget 关联蓝图） ============
+
+	/** Open 按钮 */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UButton* OpenButton;
+
+	/** Save 按钮 */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UButton* SaveButton;
+
+	/** Close 按钮 */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UButton* CloseButton;
+
+	/** Browse to Asset 按钮 (可选，单选时显示) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	UButton* BrowseButton;
+
+	/** Create/Add Group 按钮 */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UButton* GroupButton;
+
+	// ============ 可选的文本组件 ============
+
+	/** 标题文本 (可选，显示选中的标签数量) */
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	UTextBlock* TitleText;
+
 	// ============ 数据 ============
 
 	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
@@ -62,17 +67,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Context Menu")
 	TWeakObjectPtr<UTabManager> TabManagerRef;
 
-	// ============ 组件 ============
-
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UVerticalBox* MenuItemContainer;
-
 	// ============ 子菜单类引用 ============
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Context Menu|Classes")
 	TSubclassOf<UTabGroupSubMenu> GroupSubMenuClass;
 
-	// ============ 事件 ============
+	// ============ 事件委托（供蓝图监听） ============
 
 	UPROPERTY(BlueprintAssignable, Category = "Context Menu")
 	FOnMenuClosed OnMenuClosed;
@@ -80,7 +80,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Context Menu")
 	FOnMenuItemClicked OnMenuItemClicked;
 
-	// ============ 方法 ============
+	// ============ 公共方法 ============
 
 	/** 初始化菜单 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
@@ -94,48 +94,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void CloseMenu();
 
-	/** 获取菜单项 */
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	TArray<FTabMenuItemData> GetMenuItems() const;
-
-	// ============ 菜单操作 ============
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void ExecuteMenuAction(const FString& ActionId);
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void MenuAction_Open();
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void MenuAction_Close();
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void MenuAction_Save();
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void MenuAction_BrowseToAsset();
-
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void MenuAction_ShowGroupSubMenu();
-
-	// ============ 蓝图事件 ============
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
-	void OnMenuInitialized();
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
-	void OnPopulateMenuItems(const TArray<FTabMenuItemData>& Items);
-
-	UFUNCTION(BlueprintImplementableEvent, Category = "Context Menu")
-	void OnShowSubMenu(const FString& SubMenuId, FVector2D Position);
-
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
-	void BuildMenuItems();
+	// ============ 按钮点击处理 ============
 
-	UPROPERTY()
-	TArray<FTabMenuItemData> MenuItems;
+	UFUNCTION()
+	void HandleOpenClicked();
+
+	UFUNCTION()
+	void HandleSaveClicked();
+
+	UFUNCTION()
+	void HandleCloseClicked();
+
+	UFUNCTION()
+	void HandleBrowseClicked();
+
+	UFUNCTION()
+	void HandleGroupClicked();
+
+	// ============ 内部方法 ============
+
+	/** 绑定所有按钮事件 */
+	void BindButtons();
+
+	/** 更新按钮状态（启用/禁用/可见性） */
+	void UpdateButtonStates();
+
+	/** 获取仍然有效的 Tab（过滤已关闭的） */
+	TArray<FEditorTabInfo> GetValidTabs() const;
+
+	/** 是否有脏 Tab */
+	bool HasDirtyTabs() const;
 
 	/** 活动的群组子菜单 */
 	UPROPERTY()

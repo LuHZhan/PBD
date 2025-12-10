@@ -5,6 +5,8 @@
 #include "TabContextMenu.h"
 #include "TabGroupSubMenu.h"
 #include "Components/VerticalBox.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SWindow.h"
 
 UEUW_Windows::UEUW_Windows()
 {
@@ -116,9 +118,13 @@ void UEUW_Windows::BuildGroupedList()
 				{
 					TabWidget->SetTabManager(TabManager);
 					TabWidget->SetTabData(Tab);
+					
+					// 🔧 修复：绑定右键点击事件
+					TabWidget->OnRightClicked.AddDynamic(this, &UEUW_Windows::HandleItemRightClicked);
+					
 					GroupWidget->AddChildWidget(TabWidget);
 				}
-			}
+				}
 		}
 	}
 }
@@ -181,24 +187,44 @@ void UEUW_Windows::ShowContextMenu(const TArray<FEditorTabInfo>& Tabs, FVector2D
 	// 创建菜单
 	if (ContextMenuClass && TabManager)
 	{
-		ActiveContextMenu = CreateWidget<UTabContextMenu>(this, ContextMenuClass);
+		ActiveContextMenu = CreateWidget<UTabContextMenu>(GetWorld(), ContextMenuClass);
 		if (ActiveContextMenu)
 		{
 			// 传递 GroupSubMenuClass
 			ActiveContextMenu->GroupSubMenuClass = GroupSubMenuClass;
 			
+			// 🔧 修复：在编辑器中使用 Slate Window 显示 UMG Widget
+			// 不使用 AddToViewport()，而是通过 Slate 系统显示
+			
+			// 初始化菜单（此时 Widget 已经有 World，因为从 GetWorld() 创建）
 			ActiveContextMenu->InitializeMenu(TabManager, Tabs);
-			ActiveContextMenu->AddToViewport(100);
-			ActiveContextMenu->ShowAtPosition(ScreenPosition);
+			
+			// 创建 Slate Window 来承载 UMG Widget
+			TSharedRef<SWindow> MenuWindow = SNew(SWindow)
+				.Type(EWindowType::Menu)
+				.SizingRule(ESizingRule::Autosized)
+				.SupportsMaximize(false)
+				.SupportsMinimize(false)
+				.IsTopmostWindow(true)
+				.FocusWhenFirstShown(true)
+				.ActivationPolicy(EWindowActivationPolicy::Always)
+				.Content()
+				[
+					ActiveContextMenu->TakeWidget()
+				];
+			
+			// 设置窗口位置
+			MenuWindow->MoveWindowTo(FVector2D(ScreenPosition.X, ScreenPosition.Y));
+			
+			// 显示窗口
+			FSlateApplication::Get().AddWindow(MenuWindow, true);
+			
+			// 保存窗口引用以便后续关闭
+			ActiveMenuWindow = MenuWindow;
+			
+			UE_LOG(LogTemp, Log, TEXT("[EUW_Windows] Context menu shown in Slate Window at (%.1f, %.1f)"),
+				ScreenPosition.X, ScreenPosition.Y);
 		}
-	}
-}
-
-void UEUW_Windows::ShowContextMenuForSelection(FVector2D ScreenPosition)
-{
-	if (TabManager && TabManager->HasSelection())
-	{
-		ShowContextMenu(TabManager->GetSelectedTabs(), ScreenPosition);
 	}
 }
 
@@ -207,8 +233,23 @@ void UEUW_Windows::CloseContextMenu()
 	if (ActiveContextMenu)
 	{
 		ActiveContextMenu->CloseMenu();
-		ActiveContextMenu->RemoveFromParent();
 		ActiveContextMenu = nullptr;
+	}
+	
+	// 关闭 Slate Window
+	if (ActiveMenuWindow.IsValid())
+	{
+		FSlateApplication::Get().RequestDestroyWindow(ActiveMenuWindow.Pin().ToSharedRef());
+		ActiveMenuWindow.Reset();
+	}
+}
+
+
+void UEUW_Windows::ShowContextMenuForSelection(FVector2D ScreenPosition)
+{
+	if (TabManager && TabManager->HasSelection())
+	{
+		ShowContextMenu(TabManager->GetSelectedTabs(), ScreenPosition);
 	}
 }
 

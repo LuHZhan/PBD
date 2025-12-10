@@ -74,7 +74,7 @@ FReply UTabItemWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
 	
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// 开始跟踪潜在拖拽
+		// 左键：开始跟踪潜在拖拽
 		bMouseDownForDrag = true;
 		MouseDownTime = 0.0f;
 		MouseDownPosition = InMouseEvent.GetScreenSpacePosition();
@@ -82,8 +82,9 @@ FReply UTabItemWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
 	}
 	else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		// 右键 - 显示菜单
-		HandleRightClicked(InMouseEvent.GetScreenSpacePosition());
+		// 右键：记录位置，等待 MouseUp 时统一处理
+		// 不在这里处理，保持和左键一致的时机
+		MouseDownPosition = InMouseEvent.GetScreenSpacePosition();
 		return FReply::Handled();
 	}
 
@@ -96,12 +97,26 @@ FReply UTabItemWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const 
 	{
 		if (bMouseDownForDrag && !bIsDragging)
 		{
-			// 这是点击，不是拖拽
+			// 左键点击（非拖拽）
 			bMouseDownForDrag = false;
+			
+			// 执行标签激活和选择逻辑
 			HandleItemClicked();
 			return FReply::Handled();
 		}
 		bMouseDownForDrag = false;
+	}
+	else if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		// 右键点击：先执行和左键相同的逻辑，然后显示菜单
+		
+		// 1. 先激活标签和处理选择（和左键相同）
+		HandleItemClicked();
+		
+		// 2. 然后显示右键菜单（区别于左键的额外操作）
+		HandleRightClicked(InMouseEvent.GetScreenSpacePosition());
+		
+		return FReply::Handled();
 	}
 
 	return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
