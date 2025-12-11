@@ -1,9 +1,12 @@
 #include "EUW_Windows.h"
+
+#include "EditorUtilitySubsystem.h"
 #include "TabManager.h"
 #include "TabGroupWidget.h"
 #include "TabItemWidget.h"
 #include "TabContextMenu.h"
 #include "TabGroupSubMenu.h"
+#include "TabPopupManager.h"
 #include "Components/VerticalBox.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SWindow.h"
@@ -118,13 +121,13 @@ void UEUW_Windows::BuildGroupedList()
 				{
 					TabWidget->SetTabManager(TabManager);
 					TabWidget->SetTabData(Tab);
-					
+
 					// 🔧 修复：绑定右键点击事件
 					TabWidget->OnRightClicked.AddDynamic(this, &UEUW_Windows::HandleItemRightClicked);
-					
+
 					GroupWidget->AddChildWidget(TabWidget);
 				}
-				}
+			}
 		}
 	}
 }
@@ -175,6 +178,61 @@ void UEUW_Windows::HandleGroupItemRightClicked(const FTabGroupInfo& GroupData, c
 	HandleItemRightClicked(TabInfo, ScreenPosition);
 }
 
+// 放在任何你方便调用的地方，比如 EUW_Windows.cpp 中添加一个测试函数
+
+void UEUW_Windows::TestPopupWindow()
+{
+	FVector2D CursorPos = FSlateApplication::Get().GetCursorPos();
+
+	TSharedRef<SWindow> TestWindow = SNew(SWindow)
+		.Type(EWindowType::Menu)
+		.IsPopupWindow(true)
+		.SizingRule(ESizingRule::Autosized)
+		.ScreenPosition(CursorPos)
+		.FocusWhenFirstShown(true)
+		.ActivationPolicy(EWindowActivationPolicy::Always)
+		[
+			// 简单的测试内容：一个带背景的文本
+			SNew(SBorder)
+			.BorderImage(FAppStyle::GetBrush("Menu.Background"))
+			.Padding(10.0f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(5.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString("Test Popup Window"))
+					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+				]
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(5.0f)
+				[
+					SNew(SButton)
+					.Text(FText::FromString("Click Me"))
+					.OnClicked_Lambda([]()
+					{
+						UE_LOG(LogTemp, Warning, TEXT("Button Clicked!"));
+						return FReply::Handled();
+					})
+				]
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				.Padding(5.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString("This is a borderless window"))
+				]
+			]
+		];
+
+	FSlateApplication::Get().AddWindow(TestWindow);
+
+	UE_LOG(LogTemp, Warning, TEXT("Popup window created at: %s"), *CursorPos.ToString());
+}
+
 // ============ 右键菜单 ============
 
 void UEUW_Windows::ShowContextMenu(const TArray<FEditorTabInfo>& Tabs, FVector2D ScreenPosition)
@@ -184,47 +242,32 @@ void UEUW_Windows::ShowContextMenu(const TArray<FEditorTabInfo>& Tabs, FVector2D
 	// 广播事件（用于蓝图扩展）
 	OnContextMenuRequested.Broadcast(Tabs, ScreenPosition);
 
-	// 创建菜单
+	// 使用 TabPopupManager 创建菜单
 	if (ContextMenuClass && TabManager)
 	{
-		ActiveContextMenu = CreateWidget<UTabContextMenu>(GetWorld(), ContextMenuClass);
+		// 🔧 使用 TabPopupManager 显示弹窗
+		ActiveContextMenu = Cast<UTabContextMenu>(
+			UTabPopupManager::ShowPopup(
+				ContextMenuClass,
+				ScreenPosition,
+				FVector2D::ZeroVector, // 自动大小
+				true // 点击外部关闭
+			)
+		);
+
 		if (ActiveContextMenu)
 		{
 			// 传递 GroupSubMenuClass
 			ActiveContextMenu->GroupSubMenuClass = GroupSubMenuClass;
-			
-			// 🔧 修复：在编辑器中使用 Slate Window 显示 UMG Widget
-			// 不使用 AddToViewport()，而是通过 Slate 系统显示
-			
-			// 初始化菜单（此时 Widget 已经有 World，因为从 GetWorld() 创建）
+
+			// 初始化菜单
 			ActiveContextMenu->InitializeMenu(TabManager, Tabs);
-			
-			// 创建 Slate Window 来承载 UMG Widget
-			TSharedRef<SWindow> MenuWindow = SNew(SWindow)
-				.Type(EWindowType::Menu)
-				.SizingRule(ESizingRule::Autosized)
-				.SupportsMaximize(false)
-				.SupportsMinimize(false)
-				.IsTopmostWindow(true)
-				.FocusWhenFirstShown(true)
-				.ActivationPolicy(EWindowActivationPolicy::Always)
-				.Content()
-				[
-					ActiveContextMenu->TakeWidget()
-				];
-			
-			// 设置窗口位置
-			MenuWindow->MoveWindowTo(FVector2D(ScreenPosition.X, ScreenPosition.Y));
-			
-			// 显示窗口
-			FSlateApplication::Get().AddWindow(MenuWindow, true);
-			
-			// 保存窗口引用以便后续关闭
-			ActiveMenuWindow = MenuWindow;
-			
-			UE_LOG(LogTemp, Log, TEXT("[EUW_Windows] Context menu shown in Slate Window at (%.1f, %.1f)"),
-				ScreenPosition.X, ScreenPosition.Y);
+
+			UE_LOG(LogTemp, Log, TEXT("[EUW_Windows] Context menu shown at (%.1f, %.1f)"),
+			       ScreenPosition.X, ScreenPosition.Y);
 		}
+
+		FSlateApplication::Get().AddWindow(ActiveContextMenu);
 	}
 }
 
@@ -232,15 +275,8 @@ void UEUW_Windows::CloseContextMenu()
 {
 	if (ActiveContextMenu)
 	{
-		ActiveContextMenu->CloseMenu();
+		UTabPopupManager::ClosePopup(ActiveContextMenu);
 		ActiveContextMenu = nullptr;
-	}
-	
-	// 关闭 Slate Window
-	if (ActiveMenuWindow.IsValid())
-	{
-		FSlateApplication::Get().RequestDestroyWindow(ActiveMenuWindow.Pin().ToSharedRef());
-		ActiveMenuWindow.Reset();
 	}
 }
 

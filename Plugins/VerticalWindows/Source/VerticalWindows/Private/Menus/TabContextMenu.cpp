@@ -1,6 +1,7 @@
 #include "TabContextMenu.h"
 #include "TabManager.h"
 #include "TabGroupSubMenu.h"
+#include "TabPopupManager.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
@@ -21,8 +22,7 @@ void UTabContextMenu::NativeDestruct()
 	// 关闭子菜单
 	if (ActiveGroupSubMenu)
 	{
-		ActiveGroupSubMenu->CloseSubMenu();
-		ActiveGroupSubMenu->RemoveFromParent();
+		UTabPopupManager::ClosePopup(ActiveGroupSubMenu);
 		ActiveGroupSubMenu = nullptr;
 	}
 	
@@ -66,7 +66,7 @@ void UTabContextMenu::InitializeMenu(UTabManager* Manager, const TArray<FEditorT
 	bIsMultiSelection = Tabs.Num() > 1;
 
 	// 更新按钮状态
-	// UpdateButtonStates();
+	UpdateButtonStates();
 	
 	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Initialized with %d tabs, IsMultiSelection=%d"), 
 		Tabs.Num(), bIsMultiSelection);
@@ -140,23 +140,24 @@ void UTabContextMenu::UpdateButtonStates()
 
 void UTabContextMenu::ShowAtPosition(FVector2D ScreenPosition)
 {
-	// 在固定位置显示（屏幕空间）
-	SetPositionInViewport(ScreenPosition, false);
+	// 由于现在使用 TabPopupManager，窗口位置在创建时已设置
+	// 这个方法主要用于兼容性，可以设置可见性
 	SetVisibility(ESlateVisibility::Visible);
 	
-	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Shown at position (%.1f, %.1f)"), 
-		ScreenPosition.X, ScreenPosition.Y);
+	UE_LOG(LogTemp, Log, TEXT("[TabContextMenu] Menu shown"));
 }
 
 void UTabContextMenu::CloseMenu()
 {
-	// 关闭子菜单
+	// 先关闭子菜单
 	if (ActiveGroupSubMenu)
 	{
-		ActiveGroupSubMenu->CloseSubMenu();
-		ActiveGroupSubMenu->RemoveFromParent();
+		UTabPopupManager::ClosePopup(ActiveGroupSubMenu);
 		ActiveGroupSubMenu = nullptr;
 	}
+	
+	// 关闭自己（通过 PopupManager）
+	UTabPopupManager::ClosePopup(this);
 	
 	SetVisibility(ESlateVisibility::Collapsed);
 	OnMenuClosed.Broadcast();
@@ -272,26 +273,37 @@ void UTabContextMenu::HandleGroupClicked()
 	
 	FVector2D MousePosition = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
 	
-	// 如果有 GroupSubMenuClass，创建子菜单
 	if (GroupSubMenuClass && TabManagerRef.IsValid())
 	{
 		// 关闭现有子菜单
 		if (ActiveGroupSubMenu)
 		{
-			ActiveGroupSubMenu->CloseSubMenu();
-			ActiveGroupSubMenu->RemoveFromParent();
+			UTabPopupManager::ClosePopup(ActiveGroupSubMenu);
+			ActiveGroupSubMenu = nullptr;
 		}
 		
 		TArray<FEditorTabInfo> ValidTabs = GetValidTabs();
 		
 		if (ValidTabs.Num() > 0)
 		{
-			ActiveGroupSubMenu = CreateWidget<UTabGroupSubMenu>(this, GroupSubMenuClass);
+			// 🔧 使用 TabPopupManager 显示子菜单
+			// 位置设置为主菜单右侧
+			FVector2D SubMenuPosition = MousePosition;
+			SubMenuPosition.X += 300.0f;  // 向右偏移300像素
+			
+			ActiveGroupSubMenu = Cast<UTabGroupSubMenu>(
+				UTabPopupManager::ShowPopup(
+					GroupSubMenuClass,
+					SubMenuPosition,
+					FVector2D::ZeroVector,  // 自动大小
+					true  // 点击外部关闭
+				)
+			);
+			
 			if (ActiveGroupSubMenu)
 			{
+				// 初始化子菜单
 				ActiveGroupSubMenu->InitializeSubMenu(TabManagerRef.Get(), ValidTabs);
-				ActiveGroupSubMenu->AddToViewport(101);
-				ActiveGroupSubMenu->ShowAtPosition(MousePosition);
 				
 				OnMenuItemClicked.Broadcast(TEXT("Group"));
 				

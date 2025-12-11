@@ -135,6 +135,7 @@ private:
 
 	UFUNCTION()
 	void HandleGroupItemRightClicked(const FTabGroupInfo& GroupData, const FEditorTabInfo& TabInfo, FVector2D ScreenPosition);
+	void TestPopupWindow();
 
 	// ============ 菜单状态 ============
 
