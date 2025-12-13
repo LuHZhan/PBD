@@ -87,19 +87,6 @@ UUserWidget* UTabPopupManager::ShowPopup(
 	// 追踪弹窗
 	ActivePopups.Add(Widget, PopupWindow);
 
-	// 处理窗口关闭事件
-	PopupWindow->SetOnWindowClosed(FOnWindowClosed::CreateLambda(
-		[Widget](const TSharedRef<SWindow>&)
-		{
-			ActivePopups.Remove(Widget);
-			if (Widget && Widget->IsValidLowLevel())
-			{
-				Widget->RemoveFromParent();
-			}
-			UE_LOG(LogTemp, Log, TEXT("[TabPopupManager] Popup window closed"));
-		}
-	));
-
 	UE_LOG(LogTemp, Log, TEXT("[TabPopupManager] Popup shown at (%.1f, %.1f), Size: (%.1f, %.1f)"),
 		ScreenPosition.X, ScreenPosition.Y, WindowSize.X, WindowSize.Y);
 

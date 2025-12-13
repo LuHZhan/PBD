@@ -7,10 +7,11 @@
 
 class UTabManager;
 class UTabGroupSubMenu;
-class UButton;
+class ULuBtn;
 class UTextBlock;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnMenuClosed);
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnMenuItemClicked, const FString&, MenuItemId);
 
 /**
@@ -31,29 +32,19 @@ public:
 
 	/** Open 按钮 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UButton* OpenButton;
+	ULuBtn* OpenBtn;
 
 	/** Save 按钮 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UButton* SaveButton;
+	ULuBtn* SaveBtn;
 
 	/** Close 按钮 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UButton* CloseButton;
-
-	/** Browse to Asset 按钮 (可选，单选时显示) */
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
-	UButton* BrowseButton;
+	ULuBtn* CloseBtn;
 
 	/** Create/Add Group 按钮 */
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
-	UButton* GroupButton;
-
-	// ============ 可选的文本组件 ============
-
-	/** 标题文本 (可选，显示选中的标签数量) */
-	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
-	UTextBlock* TitleText;
+	ULuBtn* GroupOperatorBtn;
 
 	// ============ 数据 ============
 
@@ -86,17 +77,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void InitializeMenu(UTabManager* Manager, const TArray<FEditorTabInfo>& Tabs);
 
-	/** 显示在指定位置 */
-	UFUNCTION(BlueprintCallable, Category = "Context Menu")
-	void ShowAtPosition(FVector2D ScreenPosition);
-
 	/** 关闭菜单 */
 	UFUNCTION(BlueprintCallable, Category = "Context Menu")
 	void CloseMenu();
 
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativePreConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	// ============ 按钮点击处理 ============
 
@@ -129,7 +118,18 @@ protected:
 	/** 是否有脏 Tab */
 	bool HasDirtyTabs() const;
 
+	TArray<TWeakObjectPtr<ULuBtn>> Btns;
+
 	/** 活动的群组子菜单 */
 	UPROPERTY()
 	UTabGroupSubMenu* ActiveGroupSubMenu;
+
+	/** 是否启用焦点丢失检测 */
+	bool bEnableFocusLostDetection = true;
+	
+	/** 焦点检测延迟时间（秒）*/
+	float FocusCheckDelay = 0.1f;
+	
+	/** 累计时间 */
+	float AccumulatedTime = 0.0f;
 };

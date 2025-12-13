@@ -266,8 +266,7 @@ void UEUW_Windows::ShowContextMenu(const TArray<FEditorTabInfo>& Tabs, FVector2D
 			UE_LOG(LogTemp, Log, TEXT("[EUW_Windows] Context menu shown at (%.1f, %.1f)"),
 			       ScreenPosition.X, ScreenPosition.Y);
 		}
-
-		FSlateApplication::Get().AddWindow(ActiveContextMenu);
+		
 	}
 }
 

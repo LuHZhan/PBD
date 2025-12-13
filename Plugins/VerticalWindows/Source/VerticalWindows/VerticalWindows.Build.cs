@@ -13,6 +13,7 @@ public class VerticalWindows : ModuleRules
 				System.IO.Path.Combine(ModuleDirectory, "Public/Core"),
 				System.IO.Path.Combine(ModuleDirectory, "Public/Widgets"),
 				System.IO.Path.Combine(ModuleDirectory, "Public/Menus"),
+				System.IO.Path.Combine(ModuleDirectory, "Public/Common"),
 				// ... add public include paths required here ...
 			}
 			);
@@ -36,7 +37,7 @@ public class VerticalWindows : ModuleRules
 				"UMG",
 				"InputCore", 
 				"JsEnv", 
-				"EnhancedInput"
+				"EnhancedInput", "Blutility"
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
