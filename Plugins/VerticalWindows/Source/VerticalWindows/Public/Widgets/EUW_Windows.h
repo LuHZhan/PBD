@@ -119,7 +119,7 @@ private:
 	// ============ 事件处理（转发到 TabManager） ============
 
 	UFUNCTION()
-	void HandleItemClicked(const FEditorTabInfo& TabInfo);
+	void HandleItemClicked(const FEditorTabInfo& TabInfo); 
 
 	UFUNCTION()
 	void HandleItemClosed(const FEditorTabInfo& TabInfo);

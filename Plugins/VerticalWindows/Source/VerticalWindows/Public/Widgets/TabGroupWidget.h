@@ -3,7 +3,11 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/VerticalBox.h"
+#include "Components/Button.h"
+#include "Components/ExpandableArea.h"
+#include "Components/TextBlock.h"
 #include "TabTypes.h"
+#include "Components/Image.h"
 #include "TabGroupWidget.generated.h"
 
 class UTabItemWidget;
@@ -40,6 +44,18 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
 	UVerticalBox* ItemContainer;
+	
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UButton* HeaderButton;
+
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UExpandableArea* GroupExpandableArea;
+
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidget))
+	UTextBlock* GroupNameText;
+
+	UPROPERTY(BlueprintReadWrite, meta = (BindWidgetOptional))
+	UImage* ExpandableAreaBG;
 
 	// ============ 事件 ============
 
@@ -100,6 +116,19 @@ public:
 	void OnExpansionStateChanged(bool bExpanded);
 
 protected:
+	virtual void NativeConstruct() override;
+	
+	// 🆕 新增方法
+	UFUNCTION()
+	void HandleHeaderButtonClicked();
+	
+	/** 更新背景颜色 */
+	void UpdateExpandableAreaColor();
+	
+	/** 更新群组名称 */
+	void UpdateGroupNameText();
+	
+	// 原有方法
 	UFUNCTION(BlueprintCallable, Category = "Tab Group")
 	void HandleHeaderClicked();
 
