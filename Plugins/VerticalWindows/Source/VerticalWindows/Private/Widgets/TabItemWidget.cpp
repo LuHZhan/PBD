@@ -337,7 +337,9 @@ void UTabItemWidget::OnDataUpdated_Implementation()
 	if (IconImage)
 	{
 		IconImage->SetBrush(TabData.IconBrush);
-		IconImage->SetColorAndOpacity(TabData.GroupColor);
+		// 🔧 移除图标染色，让图标保持原色
+		// IconImage->SetColorAndOpacity(TabData.GroupColor);
+		IconImage->SetColorAndOpacity(FLinearColor::White);  // 使用白色（原色）
 	}
 
 	if (DirtyIndicator)

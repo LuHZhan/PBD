@@ -11,6 +11,8 @@
 #include "IContentBrowserSingleton.h"
 #include "FileHelpers.h"
 #include "Styling/SlateIconFinder.h"
+#include "Framework/Docking/TabManager.h"
+#include "Widgets/Docking/SDockTab.h"
 
 UTabManager::UTabManager()
 {
@@ -52,6 +54,8 @@ void UTabManager::InitGroupColors()
 	GroupColors.Add(TEXT("World"), FLinearColor(0.17f, 0.24f, 0.31f, 1.0f));
 	GroupColors.Add(TEXT("DataTable"), FLinearColor(0.09f, 0.63f, 0.52f, 1.0f));
 	GroupColors.Add(TEXT("CurveFloat"), FLinearColor(0.95f, 0.77f, 0.06f, 1.0f));
+	// 🆕 新增：工具窗口颜色
+	GroupColors.Add(TEXT("EditorTools"), FLinearColor(0.65f, 0.65f, 0.65f, 1.0f)); // 银灰色
 	GroupColors.Add(TEXT("Other"), FLinearColor(0.50f, 0.55f, 0.55f, 1.0f));
 }
 
@@ -59,37 +63,55 @@ void UTabManager::InitGroupColors()
 
 bool UTabManager::ActivateTab(const FString& TabId)
 {
+	// 🔧 先尝试作为资产编辑器激活
 	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!AssetEditorSubsystem) return false;
-
-	TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
-	for (UObject* Asset : EditedAssets)
+	if (AssetEditorSubsystem)
 	{
-		if (Asset && Asset->GetPathName() == TabId)
+		TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+		for (UObject* Asset : EditedAssets)
 		{
-			AssetEditorSubsystem->OpenEditorForAsset(Asset);
-
-			// 查找并广播标签信息
-			for (const FEditorTabInfo& Tab : CachedTabs)
+			if (Asset && Asset->GetPathName() == TabId)
 			{
-				if (Tab.TabId == TabId)
+				AssetEditorSubsystem->OpenEditorForAsset(Asset);
+
+				// 查找并广播标签信息
+				for (const FEditorTabInfo& Tab : CachedTabs)
 				{
-					OnTabActivated.Broadcast(Tab);
-					break;
+					if (Tab.TabId == TabId)
+					{
+						OnTabActivated.Broadcast(Tab);
+						break;
+					}
 				}
+				return true;
 			}
+		}
+
+		// 尝试加载并打开
+		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+		FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(TabId));
+
+		if (AssetData.IsValid())
+		{
+			AssetEditorSubsystem->OpenEditorForAsset(AssetData.GetAsset());
 			return true;
 		}
 	}
 
-	// 尝试加载并打开
-	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
-	FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(FSoftObjectPath(TabId));
-
-	if (AssetData.IsValid())
+	// 🆕 尝试作为工具窗口激活
+	TSharedPtr<FTabManager> GlobalTabManager = FGlobalTabmanager::Get();
+	if (GlobalTabManager.IsValid())
 	{
-		GEditor->GetEditorSubsystem<UAssetEditorSubsystem>()->OpenEditorForAsset(AssetData.GetAsset());
-		return true;
+		// 使用 FindExistingLiveTab 查找
+		TSharedPtr<SDockTab> ExistingTab = GlobalTabManager->FindExistingLiveTab(FTabId(FName(*TabId)));
+
+		if (ExistingTab.IsValid())
+		{
+			// 找到匹配的标签，激活它
+			ExistingTab->ActivateInParent(ETabActivationCause::SetDirectly);
+			ExistingTab->DrawAttention();
+			return true;
+		}
 	}
 
 	return false;
@@ -97,19 +119,37 @@ bool UTabManager::ActivateTab(const FString& TabId)
 
 bool UTabManager::CloseTab(const FString& TabId)
 {
+	// 🔧 先尝试作为资产编辑器关闭
 	UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
-	if (!AssetEditorSubsystem) return false;
-
-	TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
-
-	for (UObject* Asset : EditedAssets)
+	if (AssetEditorSubsystem)
 	{
-		if (Asset && Asset->GetPathName() == TabId)
+		TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
+
+		for (UObject* Asset : EditedAssets)
 		{
-			AssetEditorSubsystem->CloseAllEditorsForAsset(Asset);
+			if (Asset && Asset->GetPathName() == TabId)
+			{
+				AssetEditorSubsystem->CloseAllEditorsForAsset(Asset);
+				return true;
+			}
+		}
+	}
+
+	// 🆕 尝试作为工具窗口关闭
+	TSharedPtr<FTabManager> GlobalTabManager = FGlobalTabmanager::Get();
+	if (GlobalTabManager.IsValid())
+	{
+		// 使用 FindExistingLiveTab 查找
+		TSharedPtr<SDockTab> ExistingTab = GlobalTabManager->FindExistingLiveTab(FTabId(FName(*TabId)));
+
+		if (ExistingTab.IsValid())
+		{
+			// 找到匹配的标签，请求关闭
+			ExistingTab->RequestCloseTab();
 			return true;
 		}
 	}
+
 	return false;
 }
 
@@ -229,6 +269,8 @@ TArray<FEditorTabInfo> UTabManager::GenerateTabList()
 	TArray<UObject*> EditedAssets = AssetEditorSubsystem->GetAllEditedAssets();
 
 	int32 Index = 0;
+
+	// 1️⃣ 获取资产编辑器标签
 	for (UObject* Asset : EditedAssets)
 	{
 		if (!Asset) continue;
@@ -265,6 +307,73 @@ TArray<FEditorTabInfo> UTabManager::GenerateTabList()
 		}
 
 		Tabs.Add(TabInfo);
+	}
+
+	// 2️⃣ 🆕 检查预定义的工具窗口
+	// 由于 UE 没有提供枚举所有打开标签的 API，使用预定义列表
+	TArray<FName> KnownToolTabIds = {
+		FName("EditorSettings"), // Editor Preferences
+		FName("WidgetReflector"), // Widget Reflector
+		FName("OutputLog"), // Output Log
+		FName("MessageLog"), // Message Log
+		FName("DeviceOutputLog"), // Device OutputLog
+		FName("PluginsEditor"), // Plugins
+		FName("ProjectSettings"), // Project Settings
+		FName("Modules"), // Modules
+		FName("LevelEditorPixelInspector"), // Level EditorPixelInspector
+		FName("NiagaraDebugger"), // Niagara Debugger
+		FName("VisualLogger"), // Visual Logger
+		FName("CollisionAnalyzerApp"), // Collision AnalyzerApp
+		FName("ChaosVisualDebuggerTab"), // Chaos VisualDebuggerTab
+		FName("LevelEditor"), // Level Editor
+		FName("BlueprintDebugger"), // Blueprint Debugger
+		FName("ReferenceViewer"), // Reference Viewer
+
+	};
+
+	// 已处理的 TabId（用于去重）
+	TSet<FString> ProcessedTabIds;
+	for (const FEditorTabInfo& Tab : Tabs)
+	{
+		ProcessedTabIds.Add(Tab.TabId);
+	}
+
+	TSharedPtr<FTabManager> GlobalTabManager = FGlobalTabmanager::Get();
+
+	for (const FName& TabId : KnownToolTabIds)
+	{
+		// 使用 FindExistingLiveTab 检查标签是否打开
+		TSharedPtr<SDockTab> ExistingTab = GlobalTabManager->FindExistingLiveTab(FTabId(TabId));
+
+		if (ExistingTab.IsValid())
+		{
+			FString TabIdStr = TabId.ToString();
+
+			// 去重检查
+			if (ProcessedTabIds.Contains(TabIdStr))
+			{
+				continue;
+			}
+
+			// 创建工具窗口标签信息
+			FEditorTabInfo ToolTabInfo;
+			ToolTabInfo.TabId = TabIdStr;
+			ToolTabInfo.DisplayName = ExistingTab->GetTabLabel().ToString();
+			ToolTabInfo.AssetPath = TEXT("");
+			ToolTabInfo.AssetClassName = TEXT("EditorTool");
+			ToolTabInfo.AssetType = TEXT("EditorTools");
+			ToolTabInfo.bIsDirty = false;
+			ToolTabInfo.bIsActive = ExistingTab->IsForeground();
+			ToolTabInfo.GroupId = TEXT("EditorTools");
+			ToolTabInfo.GroupColor = GetAssetTypeColor(TEXT("EditorTools"));
+			ToolTabInfo.DisplayOrder = Index++;
+
+			const FSlateBrush* IconBrush = FAppStyle::GetBrush(TEXT("Icons.Settings"));
+			ToolTabInfo.IconBrush = *IconBrush;
+
+			Tabs.Add(ToolTabInfo);
+			ProcessedTabIds.Add(TabIdStr);
+		}
 	}
 
 	return Tabs;
@@ -615,7 +724,8 @@ void UTabManager::CreateCustomGroup(const FString& GroupName, FLinearColor Group
 
 void UTabManager::DeleteCustomGroup(const FString& GroupId)
 {
-	CustomGroups.RemoveAll([&GroupId](const FCustomTabGroup& Group) {
+	CustomGroups.RemoveAll([&GroupId](const FCustomTabGroup& Group)
+	{
 		return Group.GroupId == GroupId;
 	});
 	RefreshTabs();
