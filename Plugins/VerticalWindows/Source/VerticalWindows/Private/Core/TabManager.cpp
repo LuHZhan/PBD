@@ -49,12 +49,12 @@ void UTabManager::InitGroupColors()
 	GroupColors.Add(TEXT("SkeletalMesh"), FLinearColor(0.10f, 0.74f, 0.61f, 1.0f));
 	GroupColors.Add(TEXT("AnimSequence"), FLinearColor(0.91f, 0.30f, 0.24f, 1.0f));
 	GroupColors.Add(TEXT("AnimMontage"), FLinearColor(0.91f, 0.30f, 0.24f, 1.0f));
+	GroupColors.Add(TEXT("PhysicsAsset"), FLinearColor(0.85f, 0.65f, 0.30f, 1.0f));  // 金色/橙色
 	GroupColors.Add(TEXT("SoundWave"), FLinearColor(0.95f, 0.61f, 0.07f, 1.0f));
 	GroupColors.Add(TEXT("NiagaraSystem"), FLinearColor(0.56f, 0.27f, 0.68f, 1.0f));
 	GroupColors.Add(TEXT("World"), FLinearColor(0.17f, 0.24f, 0.31f, 1.0f));
 	GroupColors.Add(TEXT("DataTable"), FLinearColor(0.09f, 0.63f, 0.52f, 1.0f));
 	GroupColors.Add(TEXT("CurveFloat"), FLinearColor(0.95f, 0.77f, 0.06f, 1.0f));
-	// 🆕 新增：工具窗口颜色
 	GroupColors.Add(TEXT("EditorTools"), FLinearColor(0.65f, 0.65f, 0.65f, 1.0f)); // 银灰色
 	GroupColors.Add(TEXT("Other"), FLinearColor(0.50f, 0.55f, 0.55f, 1.0f));
 }
@@ -827,6 +827,7 @@ FString UTabManager::GetAssetTypeDisplayName(UClass* AssetClass)
 		{TEXT("SkeletalMesh"), TEXT("SkeletalMesh")},
 		{TEXT("AnimSequence"), TEXT("AnimSequence")},
 		{TEXT("AnimMontage"), TEXT("AnimMontage")},
+		{TEXT("PhysicsAsset"), TEXT("PhysicsAsset")},  
 		{TEXT("SoundWave"), TEXT("SoundWave")},
 		{TEXT("SoundCue"), TEXT("SoundWave")},
 		{TEXT("NiagaraSystem"), TEXT("NiagaraSystem")},
@@ -853,6 +854,7 @@ UClass* UTabManager::FindAssetClassByName(const FString& ClassName)
 		{TEXT("SkeletalMesh"), TEXT("/Script/Engine.SkeletalMesh")},
 		{TEXT("AnimSequence"), TEXT("/Script/Engine.AnimSequence")},
 		{TEXT("AnimMontage"), TEXT("/Script/Engine.AnimMontage")},
+		{TEXT("PhysicsAsset"), TEXT("/Script/Engine.PhysicsAsset")},  // 🆕 新增
 		{TEXT("SoundWave"), TEXT("/Script/Engine.SoundWave")},
 		{TEXT("SoundCue"), TEXT("/Script/Engine.SoundCue")},
 		{TEXT("NiagaraSystem"), TEXT("/Script/Niagara.NiagaraSystem")},
