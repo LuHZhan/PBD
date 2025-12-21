@@ -1,7 +1,7 @@
 import * as UE from 'ue'
 import {argv, blueprint, $ref, $unref} from 'puerts';
 
-console.log("📦 TS_PhyControlDog module loaded-lhz");
+console.log("==========  TS_PhyControlDog module loaded ==========");
 
 // ========================================
 // 延迟工具函数
@@ -25,7 +25,9 @@ const BP_PhyDog = blueprint.tojs<typeof UE.Game.PhysicsControl.BP_PhyDog.BP_PhyD
 // ========================================
 // 2️⃣ 定义 Mixin 接口（继承蓝图类型）
 // ========================================
-interface PhyDogMixin extends UE.Game.PhysicsControl.BP_PhyDog.BP_PhyDog_C {}
+interface PhyDogMixin extends UE.Game.PhysicsControl.BP_PhyDog.BP_PhyDog_C {
+    // LimbSetupData: any;
+}
 
 class PhyDogMixin {
     // TS专用字段
@@ -65,8 +67,7 @@ class PhyDogMixin {
     PhysicsControllerInit(): void {
         console.log("\n🔧 Initializing PhysicsControl...");
 
-        this.GetAllComponents();
-
+        // this.GetAllComponents();
         // 直接访问蓝图暴露的组件（如果有）
         let PhysicsController = (this as any).PhysicsControl;
 
@@ -105,13 +106,22 @@ class PhyDogMixin {
      */
     private CreatePhysicsControls(PhysicsController: any, Mesh: UE.SkeletalMeshComponent): void {
         try {
-            let AllWorldSpaceControls = {};
-            let LimbWorldSpaceControls = UE.NewMap(UE.BuiltinName, UE.Object);
-            let AllParentSpaceControls = {};
-            let LimbParentSpaceControls = UE.NewMap(UE.BuiltinName, UE.Object);
-            let AllBodyModifiers = {};
-            let LimbBodyModifiers = UE.NewMap(UE.BuiltinName, UE.Object);
-            const LimbSetupData = UE.NewArray(UE.Object);
+            // FPhysicsControlNames& - 结构体引用
+            let AllWorldSpaceControls = new UE.PhysicsControlNames();
+            let AllParentSpaceControls = new UE.PhysicsControlNames();
+            let AllBodyModifiers = new UE.PhysicsControlNames();
+
+            // TMap<FName, FPhysicsControlNames>&
+            let LimbWorldSpaceControls = UE.NewMap(UE.BuiltinName, UE.PhysicsControlNames);
+            let LimbParentSpaceControls = UE.NewMap(UE.BuiltinName, UE.PhysicsControlNames);
+            let LimbBodyModifiers = UE.NewMap(UE.BuiltinName, UE.PhysicsControlNames);
+
+            const limbSetupData = (this as any).LimbSetupData as UE.TArray<UE.PhysicsControlLimbSetupData>;
+
+            if (!limbSetupData || limbSetupData.Num() === 0) {
+                console.error("❌ LimbSetupData is empty! Configure it in Blueprint.");
+                return;
+            }
 
             if (typeof PhysicsController.CreateControlsAndBodyModifiersFromLimbBones === 'function') {
                 PhysicsController.CreateControlsAndBodyModifiersFromLimbBones(
@@ -122,11 +132,11 @@ class PhyDogMixin {
                     $ref(AllBodyModifiers),
                     $ref(LimbBodyModifiers),
                     Mesh,
-                    LimbSetupData,
-                    undefined,
-                    undefined,
-                    undefined,
-                    undefined,
+                    limbSetupData,
+                    new UE.PhysicsControlData(),
+                    new UE.PhysicsControlData(),
+                    new UE.PhysicsControlModifierData(),
+                    null,
                     ""
                 );
 
@@ -135,17 +145,11 @@ class PhyDogMixin {
                 console.log("✅ PhysicsControl initialized!");
 
             } else {
-                console.error("❌ CreateControlsAndBodyModifiersFromLimbBones method not found!");
-                for (const key in PhysicsController) {
-                    if (typeof PhysicsController[key] === 'function') {
-                        console.log(`  - ${key}`);
-                    }
-                }
+                console.error("❌ Method not found!");
             }
 
         } catch (error) {
-            console.error("❌ Error calling CreateControlsAndBodyModifiersFromLimbBones:");
-            console.error(error);
+            console.error("❌ Error:", error);
         }
     }
 
