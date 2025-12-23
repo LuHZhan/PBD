@@ -14,8 +14,12 @@ public class ANX_5_2_0_Dog_R_1_3 : ModuleRules
             "InputCore",
             "Puerts",
             "JsEnv",
-            "Json",           // ← 添加这个
-            "JsonUtilities"   // ← 添加这个
+            "Json",
+            "JsonUtilities",
+            "PhysicsControl",
+            "Slate",
+            "SlateCore",
+            "UMG" // Added UMG for UUserWidget
         });
 
         // 编辑器模块只在编辑器构建时添加

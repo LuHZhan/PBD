@@ -47,132 +47,140 @@
 UCLASS()
 class UPhyControl_UI : public UUserWidget
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    // ==================== 数据绑定 ====================
-    
-    UPROPERTY(BlueprintReadOnly, Category = "Physics Control")
-    FPhyControlUIData ControlData;
+	// ==================== 数据绑定 ====================
 
-    UPROPERTY(BlueprintAssignable, Category = "Physics Control")
-    FOnPhyControlDataChanged OnDataChanged;
+	UPROPERTY(BlueprintReadOnly, Category = "Physics Control")
+	FPhyControlUIData ControlData;
 
-    UPROPERTY(BlueprintAssignable, Category = "Physics Control")
-    FOnPhyControlValueChanged OnValueChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Physics Control")
+	FOnPhyControlDataChanged OnDataChanged;
 
-    UPROPERTY(BlueprintAssignable, Category = "Physics Control")
-    FOnPhyControlBoolChanged OnBoolChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Physics Control")
+	FOnPhyControlValueChanged OnValueChanged;
 
-    // ==================== 公共方法 ====================
-    
-    UFUNCTION(BlueprintCallable, Category = "Physics Control")
-    void SetControlData(const FPhyControlUIData& InData);
+	UPROPERTY(BlueprintAssignable, Category = "Physics Control")
+	FOnPhyControlBoolChanged OnBoolChanged;
 
-    UFUNCTION(BlueprintCallable, Category = "Physics Control")
-    void SetTargetLimb(FName LimbName);
+	// ==================== 公共方法 ====================
 
-    UFUNCTION(BlueprintCallable, Category = "Physics Control")
-    void RefreshUI();
+	UFUNCTION(BlueprintCallable, Category = "Physics Control")
+	void SetControlData(const FPhyControlUIData& InData);
+
+	UFUNCTION(BlueprintCallable, Category = "Physics Control")
+	void SetTargetLimb(FName LimbName);
+
+	UFUNCTION(BlueprintCallable, Category = "Physics Control")
+	void RefreshUI();
 
 protected:
-    virtual TSharedRef<SWidget> RebuildWidget() override;
-    virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
 
 private:
-    // ==================== 控件引用 ====================
-    
-    TSharedPtr<SWidget> RootWidget;
-    
-    // 指示器图标
-    TSharedPtr<SImage> WorldIndicator;
-    TSharedPtr<SImage> ParentIndicator;
-    
-    // 右侧按钮指示器 (P/G/S/M/B)
-    TSharedPtr<SBorder> ButtonP_Indicator;
-    TSharedPtr<SBorder> ButtonG_Indicator;
-    TSharedPtr<SBorder> ButtonS_Indicator;
-    TSharedPtr<SBorder> ButtonM_Indicator;
-    TSharedPtr<SBorder> ButtonB_Indicator;
-    
-    // T 按钮指示器
-    TSharedPtr<SBorder> ButtonT_Indicator;
-    
-    // 底部按钮
-    TSharedPtr<SButton> ButtonR;
-    TSharedPtr<SButton> ButtonI;
-    TSharedPtr<SButton> ButtonW;
-    TSharedPtr<SButton> ButtonS_Bottom;
+	// ==================== 控件引用 ====================
 
-    // ==================== 面板创建 ====================
-    
-    TSharedRef<SWidget> CreateControlSpacePanel(
-        const FString& Title,
-        FPhyControlSpaceData* SpaceData,
-        TSharedPtr<SImage>& OutIndicator,
-        TFunction<void()> OnToggled
-    );
+	TSharedPtr<SWidget> RootWidget;
 
-    TSharedRef<SWidget> CreateRightButtonColumn();
+	// 指示器图标
+	TSharedPtr<SImage> WorldIndicator;
+	TSharedPtr<SImage> ParentIndicator;
 
-    // ==================== 辅助控件创建 ====================
-    
-    // 圆形指示器按钮 (World/Parent 标题前的圆点)
-    TSharedRef<SWidget> CreateIndicatorButton(
-        bool* EnabledPtr,
-        TSharedPtr<SImage>& OutIndicator,
-        TFunction<void()> OnClicked
-    );
+	// 右侧按钮指示器 (P/G/S/M/B)
+	TSharedPtr<SBorder> ButtonP_Indicator;
+	TSharedPtr<SBorder> ButtonG_Indicator;
+	TSharedPtr<SBorder> ButtonS_Indicator;
+	TSharedPtr<SBorder> ButtonM_Indicator;
+	TSharedPtr<SBorder> ButtonB_Indicator;
 
-    // 右侧/T 圆形按钮
-    TSharedRef<SWidget> CreateCircleButton(
-        const FString& Label,
-        bool* EnabledPtr,
-        TSharedPtr<SBorder>& OutIndicator,
-        TFunction<void()> OnClicked
-    );
+	// T 按钮指示器
+	TSharedPtr<SBorder> ButtonT_Indicator;
 
-    // 底部橙色按钮 (R/I/W/S)
-    TSharedRef<SWidget> CreateBottomButton(
-        const FString& Label,
-        TSharedPtr<SButton>& OutButton,
-        TFunction<void()> OnClicked
-    );
+	// 底部按钮
+	TSharedPtr<SButton> ButtonR;
+	TSharedPtr<SButton> ButtonI;
+	TSharedPtr<SButton> ButtonW;
+	TSharedPtr<SButton> ButtonS_Bottom;
+	
 
-    // 自定义垂直滑块 (带横向长方形滑块)
-    TSharedRef<SWidget> CreateCustomVerticalSlider(
-        const FString& Label,
-        float* ValuePtr,
-        TFunction<void(float)> OnChanged
-    );
-    
-    // 自定义水平滑块 (带横向长方形滑块)
-    TSharedRef<SWidget> CreateCustomHorizontalSlider(
-        float* ValuePtr,
-        float MinValue,
-        float MaxValue,
-        TFunction<void(float)> OnChanged
-    );
+	// ==================== 面板创建 ====================
 
-    // ==================== UI 更新 ====================
-    
-    void UpdateIndicator(TSharedPtr<SImage>& Indicator, bool bEnabled);
-    void UpdateCircleButton(TSharedPtr<SBorder>& Indicator, bool bEnabled);
+	TSharedRef<SWidget> CreateControlSpacePanel(
+		const FString& Title,
+		FPhyControlSpaceData* SpaceData,
+		TSharedPtr<SImage>& OutIndicator,
+		TFunction<void()> OnToggled
+	);
 
-    // ==================== 蓝图可重载 ====================
-    
-    /** 获取指示器 Brush，蓝图可重载自定义外观 */
-    UFUNCTION(BlueprintNativeEvent, Category = "Physics Control|Style")
-    FSlateBrush GetIndicatorBrush(bool bEnabled);
+	TSharedRef<SWidget> CreateRightButtonColumn();
 
-    
-    virtual FSlateBrush GetIndicatorBrush_Implementation(bool bEnabled);
+	// ==================== 辅助控件创建 ====================
 
-    // ==================== 回调 ====================
-    
-    void OnWorldToggle();
-    void OnParentToggle();
-    void NotifyDataChanged();
-    void OnResetRequested();
-    void OnInitializeRequested();
+	// 圆形指示器按钮 (World/Parent 标题前的圆点)
+	TSharedRef<SWidget> CreateIndicatorButton(
+		bool* EnabledPtr,
+		TSharedPtr<SImage>& OutIndicator,
+		TFunction<void()> OnClicked
+	);
+
+	// 右侧/T 圆形按钮
+	TSharedRef<SWidget> CreateCircleButton(
+		const FString& Label,
+		bool* EnabledPtr,
+		TSharedPtr<SBorder>& OutIndicator,
+		TFunction<void()> OnClicked
+	);
+
+	// 底部橙色按钮 (R/I/W/S)
+	TSharedRef<SWidget> CreateBottomButton(
+		const FString& Label,
+		TSharedPtr<SButton>& OutButton,
+		TFunction<void()> OnClicked
+	);
+
+	// 自定义垂直滑块 (带横向长方形滑块)
+	TSharedRef<SWidget> CreateCustomVerticalSlider(
+		const FString& Label,
+		float* ValuePtr,
+		TFunction<void(float)> OnChanged
+	);
+
+	// 自定义水平滑块 (带横向长方形滑块)
+	TSharedRef<SWidget> CreateCustomHorizontalSlider(
+		float* ValuePtr,
+		float MinValue,
+		float MaxValue,
+		TFunction<void(float)> OnChanged
+	);
+
+	// ==================== UI 更新 ====================
+
+	void UpdateIndicator(TSharedPtr<SImage>& Indicator, bool bEnabled);
+	void UpdateCircleButton(TSharedPtr<SBorder>& Indicator, bool bEnabled);
+
+	// ==================== 蓝图可重载 ====================
+
+public:
+	/** 获取指示器 Brush,蓝图可重载自定义外观 */
+	UFUNCTION(BlueprintNativeEvent, Category = "Physics Control|Style")
+	void UpdateIndicatorBrush(bool bEnabled) const;
+
+	// ==================== 样式缓存 ====================
+
+	// 指示器 Brush 缓存（用于 SetImage）
+	UPROPERTY(BlueprintReadWrite, Category = "Physics Control")
+	FSlateBrush EnabledBrush;
+	
+	UPROPERTY(BlueprintReadWrite, Category = "Physics Control")
+	FSlateBrush DisabledBrush;
+
+	// ==================== 回调 ====================
+
+	void OnWorldToggle();
+	void OnParentToggle();
+	void NotifyDataChanged();
+	void OnResetRequested();
+	void OnInitializeRequested();
 };
