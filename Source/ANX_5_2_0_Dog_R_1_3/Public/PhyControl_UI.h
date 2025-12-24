@@ -78,6 +78,7 @@ public:
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+	virtual void NativePreConstruct() override;
 
 private:
 	// ==================== 控件引用 ====================
@@ -154,7 +155,9 @@ private:
 		float MaxValue,
 		TFunction<void(float)> OnChanged
 	);
-
+	
+	FSliderStyle CustomSliderStyle;
+	
 	// ==================== UI 更新 ====================
 
 	void UpdateIndicator(TSharedPtr<SImage>& Indicator, bool bEnabled);
