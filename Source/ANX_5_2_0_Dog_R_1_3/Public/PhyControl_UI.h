@@ -156,7 +156,7 @@ private:
 		TFunction<void(float)> OnChanged
 	);
 	
-	FSliderStyle CustomSliderStyle;
+	FSliderStyle CustomSliderThumbStyle;
 	
 	// ==================== UI 更新 ====================
 
@@ -186,4 +186,5 @@ public:
 	void NotifyDataChanged();
 	void OnResetRequested();
 	void OnInitializeRequested();
+	void InitializeSliderImageBrush();
 };

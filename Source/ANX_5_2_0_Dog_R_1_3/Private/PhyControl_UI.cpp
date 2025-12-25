@@ -127,6 +127,7 @@ void UPhyControl_UI::UpdateIndicatorBrush_Implementation(bool bEnabled) const
 
 TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 {
+	InitializeSliderImageBrush();
 	using namespace PhyControlSizes;
 
 	RootWidget =
@@ -519,82 +520,83 @@ TSharedRef<SWidget> UPhyControl_UI::CreateBottomButton(
 // ==================== 自定义滑块 ====================
 
 TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
-    const FString& Label,
-    float* ValuePtr,
-    TFunction<void(float)> OnChanged)
+	const FString& Label,
+	float* ValuePtr,
+	TFunction<void(float)> OnChanged)
 {
 	// 创建横向长方形 Brush
 	FSlateBrush ThumbBrush;
 	ThumbBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
 	ThumbBrush.TintColor = FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f));
-	ThumbBrush.ImageSize = FVector2D(12.0f, 12.0f);  
-    
-	CustomSliderStyle.SetNormalThumbImage(ThumbBrush);
-	CustomSliderStyle.SetHoveredThumbImage(ThumbBrush);
-	CustomSliderStyle.SetDisabledThumbImage(ThumbBrush);
+	ThumbBrush.ImageSize = FVector2D(20.0f, 20.0f);
+
+	CustomSliderThumbStyle.SetNormalThumbImage(ThumbBrush);
+	CustomSliderThumbStyle.SetHoveredThumbImage(ThumbBrush);
+	CustomSliderThumbStyle.SetDisabledThumbImage(ThumbBrush);
 	// CustomSliderStyle.SetBarThickness(4.0f);
-	
-    // 滑块尺寸
-    const float TrackHeight = 120.0f;
-    const float TrackWidth = 4.0f;
-    const float ThumbWidth = 300.0f;   // 横向长方形宽度
-    const float ThumbHeight = 8.0f;   // 横向长方形高度
-    
-    return SNew(SVerticalBox)
-        
-        // 滑块区域
-        + SVerticalBox::Slot()
-        .AutoHeight()
-        .HAlign(HAlign_Center)
-        [
-            SNew(SBox)
-            .WidthOverride(ThumbWidth + 10)
-            .HeightOverride(TrackHeight)
-            [
-                SNew(SOverlay)
-                
-                // 轨道背景 (竖线)
-                + SOverlay::Slot()
-                .HAlign(HAlign_Center)
-                .VAlign(VAlign_Fill)
-                [
-                    SNew(SBox)
-                    .WidthOverride(TrackWidth)
-                    [
-                        SNew(SBorder)
-                        .BorderBackgroundColor(FLinearColor(0.15f, 0.15f, 0.15f))
-                    ]
-                ]
-                
-                // 使用 SSlider，但设置 IndentHandle=false 让滑块填满
-                + SOverlay::Slot()
-                [
-                    SNew(SSlider)
-                	.Style(&CustomSliderStyle)
-                    .Orientation(Orient_Vertical)
-                    .IndentHandle(false)  // 关键：让滑块可以到达边缘
-                    .Value(ValuePtr ? *ValuePtr : 0.5f)
-                    .SliderBarColor(FLinearColor::Transparent)
-                    .OnValueChanged_Lambda([ValuePtr, OnChanged](float NewValue)
-                    {
-                        if (ValuePtr) *ValuePtr = NewValue;
-                        if (OnChanged) OnChanged(NewValue);
-                    })
-                ]
-            ]
-        ]
-        
-        // 标签
-        + SVerticalBox::Slot()
-        .AutoHeight()
-        .HAlign(HAlign_Center)
-        .Padding(0, 10, 0, 0)
-        [
-            SNew(STextBlock)
-            .Text(FText::FromString(Label))
-            .Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
-            .ColorAndOpacity(FLinearColor::White)
-        ];
+
+	// 滑块尺寸
+	const float TrackHeight = 120.0f;
+	const float TrackWidth = 4.0f;
+	// const float ThumbWidth = 300.0f; // 横向长方形宽度
+	// const float ThumbHeight = 8.0f; // 横向长方形高度
+
+	return SNew(SVerticalBox)
+
+			// 滑块区域
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Center)
+			[
+				SNew(SBox)
+				.WidthOverride(TrackWidth + 10)
+				.HeightOverride(TrackHeight)
+				[
+					SNew(SOverlay)
+
+					// 轨道背景 (竖线)
+					+ SOverlay::Slot()
+					.HAlign(HAlign_Center)
+					.VAlign(VAlign_Fill)
+					[
+						SNew(SBox)
+						.WidthOverride(TrackWidth * 3)
+						[
+							SNew(SImage)
+							.Image(FCoreStyle::Get().GetBrush("WhiteBrush"))  
+							.ColorAndOpacity(FLinearColor(0.55f, 0.15f, 0.15f))
+						]
+					]
+
+					// 使用 SSlider，但设置 IndentHandle=false 让滑块填满
+					+ SOverlay::Slot()
+					[
+						SNew(SSlider)
+						             .Style(&CustomSliderThumbStyle)
+						             .Orientation(Orient_Vertical)
+						             .IndentHandle(false) // 关键：让滑块可以到达边缘
+						             .Value(ValuePtr ? *ValuePtr : 0.5f)
+						             .SliderBarColor(FLinearColor::Transparent)
+						             .OnValueChanged_Lambda([ValuePtr, OnChanged](float NewValue)
+						             {
+							             if (ValuePtr) *ValuePtr = NewValue;
+							             if (OnChanged) OnChanged(NewValue);
+						             })
+					]
+				]
+			]
+
+			// 标签
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Center)
+			.Padding(0, 10, 0, 0)
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(Label))
+				.Font(FCoreStyle::GetDefaultFontStyle("Regular", 11))
+				.ColorAndOpacity(FLinearColor::White)
+			];
 }
 
 TSharedRef<SWidget> UPhyControl_UI::CreateCustomHorizontalSlider(
@@ -672,4 +674,11 @@ void UPhyControl_UI::OnInitializeRequested()
 	ControlData.Options.bInitializeRequested = true;
 	NotifyDataChanged();
 	ControlData.Options.bInitializeRequested = false;
+}
+
+void UPhyControl_UI::InitializeSliderImageBrush()
+{
+	// SliderImageBrush.DrawAs = ESlateBrushDrawType::Box;
+	// SliderImageBrush.TintColor = FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f));
+	// SliderImageBrush.ImageSize= FVector2D(20.0f, 20.0f);
 }
