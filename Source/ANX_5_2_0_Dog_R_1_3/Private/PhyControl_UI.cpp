@@ -21,12 +21,15 @@ namespace PhyControlColors
 {
 	const FLinearColor Background(0.1f, 0.1f, 0.1f, 0.85f);
 	const FLinearColor PanelBorder(0.2f, 0.2f, 0.2f, 1.0f);
-	const FLinearColor ActiveGreen(0.3f, 0.85f, 0.3f, 1.0f);
 	const FLinearColor InactiveGray(0.4f, 0.4f, 0.4f, 1.0f);
 	const FLinearColor SliderTrack(0.15f, 0.15f, 0.15f, 1.0f);
 	const FLinearColor SliderThumb(0.7f, 0.7f, 0.7f, 1.0f);
-	const FLinearColor ButtonOrange(0.9f, 0.6f, 0.1f, 1.0f);
+	const FLinearColor ButtonOrange(0.7f, 0.8f, 0.1f, 1.0f);
 	const FLinearColor TextWhite(1.0f, 1.0f, 1.0f, 1.0f);
+	const FLinearColor ButtonDefaultGreen(0.3f, 0.85f, 0.3f, 0.5f); // 淡蓝色（默认）
+	const FLinearColor ButtonClickedRed(1.0f, 0.7f, 0.7f, 0.5f); // 淡红色（点击后）
+
+	const FLinearColor ActiveGreen(0.3f, 0.85f, 0.3f, 0.5f);
 }
 
 // ==================== 尺寸定义 ====================
@@ -36,11 +39,12 @@ namespace PhyControlSizes
 	constexpr float PanelHeight = 300.0f;
 	constexpr float SliderTrackHeight = 120.0f;
 	constexpr float SliderTrackWidth = 4.0f;
-	constexpr float SliderThumbWidth = 300.0f; // 横向长方形
+	constexpr float SliderThumbWidth = 300.0f; 
 	constexpr float SliderThumbHeight = 8.0f;
 	constexpr float CircleButtonSize = 28.0f;
-	constexpr float BottomButtonWidth = 45.0f;
-	constexpr float BottomButtonHeight = 35.0f;
+	
+	constexpr float BottomButtonWidth = 30.0f;
+	constexpr float BottomButtonHeight = 30.0f;
 }
 
 // ==================== 公共方法 ====================
@@ -110,7 +114,7 @@ void UPhyControl_UI::UpdateCircleButton(TSharedPtr<SBorder>& Indicator, bool bEn
 	if (Indicator.IsValid())
 	{
 		Indicator->SetBorderBackgroundColor(
-			bEnabled ? PhyControlColors::ActiveGreen : PhyControlColors::InactiveGray
+			bEnabled ? PhyControlColors::ButtonClickedRed : PhyControlColors::ButtonDefaultGreen
 		);
 	}
 }
@@ -345,11 +349,12 @@ TSharedRef<SWidget> UPhyControl_UI::CreateControlSpacePanel(
 
 TSharedRef<SWidget> UPhyControl_UI::CreateRightButtonColumn()
 {
+	float BtnBottomPadding = 10.0f;
 	return SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(0, 0, 0, 5)
+		.Padding(0, 0, 0, BtnBottomPadding)
 		[
 			CreateCircleButton(TEXT("P"), &ControlData.BodyModifier.bPhysicsEnabled, ButtonP_Indicator,
 			                   [this]()
@@ -363,7 +368,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateRightButtonColumn()
 
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(0, 0, 0, 5)
+		.Padding(0, 0, 0, BtnBottomPadding)
 		[
 			CreateCircleButton(TEXT("G"), &ControlData.BodyModifier.bGravityEnabled, ButtonG_Indicator,
 			                   [this]()
@@ -377,7 +382,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateRightButtonColumn()
 
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(0, 0, 0, 5)
+		.Padding(0, 0, 0, BtnBottomPadding)
 		[
 			CreateCircleButton(TEXT("S"), &ControlData.BodyModifier.bSimulated, ButtonS_Indicator,
 			                   [this]()
@@ -391,7 +396,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateRightButtonColumn()
 
 		+ SVerticalBox::Slot()
 		.AutoHeight()
-		.Padding(0, 0, 0, 5)
+		.Padding(0, 0, 0, BtnBottomPadding)
 		[
 			CreateCircleButton(TEXT("M"), nullptr, ButtonM_Indicator,
 			                   [this]()
@@ -450,6 +455,9 @@ TSharedRef<SWidget> UPhyControl_UI::CreateIndicatorButton(
 		];
 }
 
+// 创建圆形按钮（右侧按钮列：P/G/S/M/B）
+// 实现方式：使用 SBorder 包裹 SButton，通过 BorderBackgroundColor 控制背景色填充
+// 优点：可以动态改变背景色（点击后变红），完全填充背景，显示效果一致
 TSharedRef<SWidget> UPhyControl_UI::CreateCircleButton(
 	const FString& Label,
 	bool* EnabledPtr,
@@ -458,36 +466,48 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCircleButton(
 {
 	using namespace PhyControlSizes;
 
-	bool bInitialEnabled = (EnabledPtr && *EnabledPtr) || (Label == TEXT("M"));
-	FLinearColor InitialColor = bInitialEnabled ? PhyControlColors::ActiveGreen : PhyControlColors::InactiveGray;
-
-	return SNew(SButton)
-		.ButtonStyle(FAppStyle::Get(), "NoBorder")
-		.OnClicked_Lambda([OnClicked]()
-		{
-			if (OnClicked) OnClicked();
-			return FReply::Handled();
-		})
+	return SNew(SBox)
+		.WidthOverride(45.0f)
+		.HeightOverride(30.0f)
 		[
 			SAssignNew(OutIndicator, SBorder)
-			.BorderBackgroundColor(InitialColor)
-			.Padding(0)
+			                                 .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")) // 使用白色填充Brush实现完全填充背景
+			                                 .BorderBackgroundColor(PhyControlColors::ButtonDefaultGreen) // 默认淡绿色背景
+			                                 .Padding(0)
 			[
-				SNew(SBox)
-				.WidthOverride(CircleButtonSize)
-				.HeightOverride(CircleButtonSize)
-				.HAlign(HAlign_Center)
-				.VAlign(VAlign_Center)
+				SNew(SButton)
+				.ButtonStyle(FAppStyle::Get(), "NoBorder")
+				.ContentPadding(FMargin(0))
+				// 注意：使用 &OutIndicator 引用捕获，确保每个按钮的 Lambda 都能正确更新自己的 OutIndicator
+				// 如果使用值捕获 [OutIndicator]，所有按钮可能会共享同一个 OutIndicator 引用
+				.OnClicked_Lambda([OnClicked, &OutIndicator]()
+				{
+					// 点击后更新背景色为淡红色
+					if (OutIndicator.IsValid())
+					{
+						OutIndicator->SetBorderBackgroundColor(PhyControlColors::ButtonClickedRed);
+					}
+					if (OnClicked) OnClicked();
+					return FReply::Handled();
+				})
 				[
-					SNew(STextBlock)
-					.Text(FText::FromString(Label))
-					.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
-					.ColorAndOpacity(PhyControlColors::TextWhite)
+					SNew(SBox)
+					.HAlign(HAlign_Center)
+					.VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(Label))
+						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
+						.ColorAndOpacity(PhyControlColors::TextWhite)
+					]
 				]
 			]
 		];
 }
 
+// 创建底部按钮（R/I/W/S）
+// 实现方式：使用 SBorder 包裹 SButton，通过 BorderBackgroundColor 控制背景色填充
+// 与 CreateCircleButton 使用相同的实现方式，确保显示效果一致
 TSharedRef<SWidget> UPhyControl_UI::CreateBottomButton(
 	const FString& Label,
 	TSharedPtr<SButton>& OutButton,
@@ -496,7 +516,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateBottomButton(
 	using namespace PhyControlSizes;
 
 	return SAssignNew(OutButton, SButton)
-		.ButtonColorAndOpacity(PhyControlColors::ButtonOrange)
+		.ButtonColorAndOpacity(PhyControlColors::ButtonDefaultGreen)
 		.OnClicked_Lambda([OnClicked]()
 		{
 			if (OnClicked) OnClicked();
@@ -527,7 +547,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
 	// 创建横向长方形 Brush
 	FSlateBrush ThumbBrush;
 	ThumbBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
-	ThumbBrush.TintColor = FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f));
+	ThumbBrush.TintColor = FSlateColor(PhyControlColors::TextWhite);
 	ThumbBrush.ImageSize = FVector2D(20.0f, 20.0f);
 
 	CustomSliderThumbStyle.SetNormalThumbImage(ThumbBrush);
@@ -538,8 +558,6 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
 	// 滑块尺寸
 	const float TrackHeight = 120.0f;
 	const float TrackWidth = 4.0f;
-	// const float ThumbWidth = 300.0f; // 横向长方形宽度
-	// const float ThumbHeight = 8.0f; // 横向长方形高度
 
 	return SNew(SVerticalBox)
 
@@ -560,11 +578,11 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
 					.VAlign(VAlign_Fill)
 					[
 						SNew(SBox)
-						.WidthOverride(TrackWidth * 3)
+						.WidthOverride(TrackWidth * 1.5)
 						[
 							SNew(SImage)
-							.Image(FCoreStyle::Get().GetBrush("WhiteBrush"))  
-							.ColorAndOpacity(FLinearColor(0.55f, 0.15f, 0.15f))
+							.Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
+							.ColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f))
 						]
 					]
 
@@ -607,38 +625,43 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCustomHorizontalSlider(
 {
 	using namespace PhyControlSizes;
 
-	float NormalizedValue = ValuePtr ? (*ValuePtr - MinValue) / (MaxValue - MinValue) : 0.5f;
+	// float NormalizedValue = ValuePtr ? (*ValuePtr - MinValue) / (MaxValue - MinValue) : 0.5f;
 
 	return SNew(SBox)
-		.HeightOverride(20)
+		.HeightOverride(6)
 		[
 			SNew(SOverlay)
 
-			// 轨道背景
+			// 轨道背景 (横线)
 			+ SOverlay::Slot()
-			.VAlign(VAlign_Center)
+			.HAlign(HAlign_Fill)
+			.VAlign(VAlign_Fill)
 			[
 				SNew(SBox)
-				.HeightOverride(SliderTrackWidth)
+				// .HeightOverride(2)
 				[
-					SNew(SBorder)
-					.BorderBackgroundColor(PhyControlColors::SliderTrack)
+					SNew(SImage)
+					.Image(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.ColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f))
 				]
 			]
 
 			// 滑块
 			+ SOverlay::Slot()
+			.VAlign(VAlign_Center)
 			[
 				SNew(SSlider)
-				.Orientation(Orient_Horizontal)
-				.Value(NormalizedValue)
-				.SliderBarColor(FLinearColor::Transparent)
-				.OnValueChanged_Lambda([ValuePtr, MinValue, MaxValue, OnChanged](float NormValue)
-				{
-					float ActualValue = MinValue + NormValue * (MaxValue - MinValue);
-					if (ValuePtr) *ValuePtr = ActualValue;
-					if (OnChanged) OnChanged(ActualValue);
-				})
+				             .Style(&CustomSliderThumbStyle)
+				             .Orientation(Orient_Horizontal)
+				             .IndentHandle(false) // 关键：让滑块可以到达边缘
+				             .Value(ValuePtr ? *ValuePtr : 0.5f)
+				             .SliderBarColor(FLinearColor::Transparent)
+				             .OnValueChanged_Lambda([ValuePtr, MinValue, MaxValue, OnChanged](float NormValue)
+				             {
+					             float ActualValue = MinValue + NormValue * (MaxValue - MinValue);
+					             if (ValuePtr) *ValuePtr = ActualValue;
+					             if (OnChanged) OnChanged(ActualValue);
+				             })
 			]
 		];
 }
