@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "PhyControlTypes.h"
+#include "Widgets/Input/SSlider.h"
 #include "PhyControl_UI.generated.h"
 
 /**
@@ -143,15 +144,21 @@ private:
 	TSharedPtr<SButton> ButtonI;
 	TSharedPtr<SButton> ButtonW;
 	TSharedPtr<SButton> ButtonS_Bottom;
+
+	// 垂直滑块 (World/Parent 的 Strength/Damping)
+	TSharedPtr<SSlider> WorldStrengthSlider;
+	TSharedPtr<SSlider> WorldDampingSlider;
+	TSharedPtr<SSlider> ParentStrengthSlider;
+	TSharedPtr<SSlider> ParentDampingSlider;
 	
 
 	// ==================== 面板创建 ====================
 
 	TSharedRef<SWidget> CreateControlSpacePanel(
+		EPhyControlSpace SpaceType,
 		const FString& Title,
-		FPhyControlSpaceData* SpaceData,
-		TSharedPtr<SImage>& OutIndicator,
-		TFunction<void()> OnToggled
+		FPhyControlSpaceData* WorldSpace,
+		FPhyControlSpaceData* ParentSpace, TSharedPtr<SImage>& OutIndicator, TFunction<void()> OnToggled
 	);
 
 	TSharedRef<SWidget> CreateRightButtonColumn();
@@ -160,9 +167,9 @@ private:
 
 	// 圆形指示器按钮 (World/Parent 标题前的圆点)
 	TSharedRef<SWidget> CreateIndicatorButton(
-		bool* EnabledPtr,
-		TSharedPtr<SImage>& OutIndicator,
-		TFunction<void()> OnClicked
+		EPhyControlSpace SpaceType,
+		bool* WorldSpaceEnabledPtr,
+		bool* ParentSpaceEnabledPtr, TSharedPtr<SImage>& OutIndicator, TFunction<void()> OnClicked
 	);
 
 	// 右侧/T 圆形按钮
@@ -184,6 +191,7 @@ private:
 	TSharedRef<SWidget> CreateCustomVerticalSlider(
 		const FString& Label,
 		float* ValuePtr,
+		TSharedPtr<SSlider>& OutSlider,
 		TFunction<void(float)> OnChanged
 	);
 
@@ -201,13 +209,10 @@ private:
 
 	void UpdateIndicator(TSharedPtr<SImage>& Indicator, bool bEnabled);
 	void UpdateCircleButton(TSharedPtr<SBorder>& Indicator, bool bEnabled);
-
-	// ==================== 蓝图可重载 ====================
+	void InitializeUIFromData();
 
 public:
-	/** 获取指示器 Brush,蓝图可重载自定义外观 */
-	UFUNCTION(BlueprintNativeEvent, Category = "Physics Control|Style")
-	void UpdateIndicatorBrush(bool bEnabled) const;
+	void UpdateIndicatorBrush(TSharedPtr<SImage>& Indicator, bool bEnabled);
 
 	// ==================== 样式缓存 ====================
 
@@ -225,5 +230,4 @@ public:
 	void NotifyDataChanged();
 	void OnResetRequested();
 	void OnInitializeRequested();
-	void InitializeSliderImageBrush();
 };

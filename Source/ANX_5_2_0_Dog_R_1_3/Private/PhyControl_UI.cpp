@@ -19,17 +19,17 @@
 // ==================== 颜色定义 ====================
 namespace PhyControlColors
 {
-	const FLinearColor Background(0.1f, 0.1f, 0.1f, 0.85f);
-	const FLinearColor PanelBorder(0.2f, 0.2f, 0.2f, 1.0f);
-	const FLinearColor InactiveGray(0.4f, 0.4f, 0.4f, 1.0f);
-	const FLinearColor SliderTrack(0.15f, 0.15f, 0.15f, 1.0f);
-	const FLinearColor SliderThumb(0.7f, 0.7f, 0.7f, 1.0f);
-	const FLinearColor ButtonOrange(0.7f, 0.8f, 0.1f, 1.0f);
-	const FLinearColor TextWhite(1.0f, 1.0f, 1.0f, 1.0f);
-	const FLinearColor ButtonDefaultGreen(0.3f, 0.85f, 0.3f, 0.5f); // 淡蓝色（默认）
-	const FLinearColor ButtonClickedRed(1.0f, 0.7f, 0.7f, 0.5f); // 淡红色（点击后）
+	constexpr FLinearColor Background(0.1f, 0.1f, 0.1f, 0.85f);
+	constexpr FLinearColor PanelBorder(0.2f, 0.2f, 0.2f, 1.0f);
+	constexpr FLinearColor InactiveGray(0.4f, 0.4f, 0.4f, 1.0f);
+	constexpr FLinearColor SliderTrack(0.15f, 0.15f, 0.15f, 1.0f);
+	constexpr FLinearColor SliderThumb(0.7f, 0.7f, 0.7f, 1.0f);
+	constexpr FLinearColor ButtonOrange(0.7f, 0.8f, 0.1f, 1.0f);
+	constexpr FLinearColor TextWhite(1.0f, 1.0f, 1.0f, 1.0f);
+	constexpr FLinearColor ButtonDefaultGreen(0.3f, 0.85f, 0.3f, 0.5f); // 淡蓝色（默认）
+	constexpr FLinearColor ButtonClickedRed(1.0f, 0.7f, 0.7f, 0.5f); // 淡红色（点击后）
 
-	const FLinearColor ActiveGreen(0.3f, 0.85f, 0.3f, 0.5f);
+	constexpr FLinearColor ActiveGreen(0.3f, 0.85f, 0.3f, 0.5f);
 }
 
 // ==================== 尺寸定义 ====================
@@ -39,10 +39,10 @@ namespace PhyControlSizes
 	constexpr float PanelHeight = 300.0f;
 	constexpr float SliderTrackHeight = 120.0f;
 	constexpr float SliderTrackWidth = 4.0f;
-	constexpr float SliderThumbWidth = 300.0f; 
+	constexpr float SliderThumbWidth = 300.0f;
 	constexpr float SliderThumbHeight = 8.0f;
 	constexpr float CircleButtonSize = 28.0f;
-	
+
 	constexpr float BottomButtonWidth = 30.0f;
 	constexpr float BottomButtonHeight = 30.0f;
 }
@@ -90,6 +90,10 @@ void UPhyControl_UI::ReleaseSlateResources(bool bReleaseChildren)
 	ButtonI.Reset();
 	ButtonW.Reset();
 	ButtonS_Bottom.Reset();
+	WorldStrengthSlider.Reset();
+	WorldDampingSlider.Reset();
+	ParentStrengthSlider.Reset();
+	ParentDampingSlider.Reset();
 }
 
 void UPhyControl_UI::NativePreConstruct()
@@ -104,8 +108,8 @@ void UPhyControl_UI::UpdateIndicator(TSharedPtr<SImage>& Indicator, bool bEnable
 	if (Indicator.IsValid())
 	{
 		// Indicator->SetImage(&GetIndicatorBrush(bEnabled));
-		UpdateIndicatorBrush(bEnabled);
-		Indicator->SetImage(&(bEnabled ? EnabledBrush : DisabledBrush));
+		UpdateIndicatorBrush(Indicator, bEnabled);
+		// Indicator->SetImage(&(bEnabled ? EnabledBrush : DisabledBrush));
 	}
 }
 
@@ -119,19 +123,50 @@ void UPhyControl_UI::UpdateCircleButton(TSharedPtr<SBorder>& Indicator, bool bEn
 	}
 }
 
+void UPhyControl_UI::InitializeUIFromData()
+{
+	if (WorldIndicator && ParentIndicator)
+	{
+		UpdateIndicator(WorldIndicator, ControlData.WorldSpace.bEnabled);
+		UpdateIndicator(ParentIndicator, ControlData.ParentSpace.bEnabled);
+	}
+
+	if (ButtonP_Indicator && ButtonG_Indicator && ButtonS_Indicator && ButtonM_Indicator && ButtonB_Indicator)
+	{
+		UpdateCircleButton(ButtonP_Indicator, ControlData.BodyModifier.bPhysicsEnabled);
+		UpdateCircleButton(ButtonG_Indicator, ControlData.BodyModifier.bGravityEnabled);
+		UpdateCircleButton(ButtonS_Indicator, ControlData.BodyModifier.bSimulated);
+
+		// 一下两个都是数值，TODO
+		UpdateCircleButton(ButtonM_Indicator, ControlData.BodyModifier.Multiplier > 1.0f);
+		UpdateCircleButton(ButtonB_Indicator, ControlData.BodyModifier.BlendWeight > 0.5f);
+	}
+
+	if (WorldStrengthSlider && WorldDampingSlider && ParentStrengthSlider && ParentDampingSlider)
+	{
+		WorldStrengthSlider->SetValue(TAttribute<float>(ControlData.WorldSpace.Strength));
+		WorldDampingSlider->SetValue(TAttribute<float>(ControlData.WorldSpace.Damping));
+		ParentStrengthSlider->SetValue(TAttribute<float>(ControlData.ParentSpace.Strength));
+		ParentDampingSlider->SetValue(TAttribute<float>(ControlData.WorldSpace.Damping));
+	}
+}
+
 // ==================== 蓝图可重载默认实现 ====================
 
-void UPhyControl_UI::UpdateIndicatorBrush_Implementation(bool bEnabled) const
+void UPhyControl_UI::UpdateIndicatorBrush(TSharedPtr<SImage>& Indicator, bool bEnabled)
 {
 	FSlateBrush Brush = bEnabled ? EnabledBrush : DisabledBrush;
 	Brush.TintColor = FSlateColor(bEnabled ? PhyControlColors::ActiveGreen : PhyControlColors::InactiveGray);
+	if (Indicator)
+	{
+		Indicator->SetImage(&(bEnabled ? EnabledBrush : DisabledBrush));
+	}
 }
 
 // ==================== UI 构建 ====================
 
 TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 {
-	InitializeSliderImageBrush();
 	using namespace PhyControlSizes;
 
 	RootWidget =
@@ -146,6 +181,7 @@ TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 			.WidthOverride(PanelWidth)
 			[
 				SNew(SBorder)
+				.Visibility(EVisibility::SelfHitTestInvisible)
 				.BorderBackgroundColor(PhyControlColors::Background)
 				.Padding(FMargin(20.0f))
 				[
@@ -163,10 +199,10 @@ TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 						.Padding(0, 0, 15, 0)
 						[
 							CreateControlSpacePanel(
-								TEXT("World"),
+								EPhyControlSpace::World,
+								L"World",
 								&ControlData.WorldSpace,
-								WorldIndicator,
-								[this]() { OnWorldToggle(); }
+								&ControlData.ParentSpace, WorldIndicator, [this]() { OnWorldToggle(); }
 							)
 						]
 
@@ -176,10 +212,10 @@ TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 						.Padding(15, 0, 15, 0)
 						[
 							CreateControlSpacePanel(
-								TEXT("Parent"),
-								&ControlData.ParentSpace,
-								ParentIndicator,
-								[this]() { OnParentToggle(); }
+								EPhyControlSpace::Parent,
+								L"Parent",
+								&ControlData.WorldSpace,
+								&ControlData.ParentSpace, ParentIndicator, [this]() { OnParentToggle(); }
 							)
 						]
 
@@ -282,16 +318,17 @@ TSharedRef<SWidget> UPhyControl_UI::RebuildWidget()
 			]
 		];
 
+	InitializeUIFromData();
 	return RootWidget.ToSharedRef();
 }
 
 // ==================== 控制空间面板 ====================
 
 TSharedRef<SWidget> UPhyControl_UI::CreateControlSpacePanel(
+	EPhyControlSpace SpaceType,
 	const FString& Title,
-	FPhyControlSpaceData* SpaceData,
-	TSharedPtr<SImage>& OutIndicator,
-	TFunction<void()> OnToggled)
+	FPhyControlSpaceData* WorldSpace,
+	FPhyControlSpaceData* ParentSpace, TSharedPtr<SImage>& OutIndicator, TFunction<void()> OnToggled)
 {
 	return SNew(SVerticalBox)
 
@@ -307,7 +344,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateControlSpacePanel(
 				.VAlign(VAlign_Center)
 				.Padding(0, 0, 10, 0)
 				[
-					CreateIndicatorButton(&SpaceData->bEnabled, OutIndicator, OnToggled)
+					CreateIndicatorButton(SpaceType, &WorldSpace->bEnabled, &ParentSpace->bEnabled, OutIndicator, OnToggled)
 				]
 
 				+ SHorizontalBox::Slot()
@@ -331,7 +368,9 @@ TSharedRef<SWidget> UPhyControl_UI::CreateControlSpacePanel(
 				.FillWidth(1.0f)
 				.HAlign(HAlign_Center)
 				[
-					CreateCustomVerticalSlider(TEXT("Strength"), &SpaceData->Strength,
+					CreateCustomVerticalSlider(TEXT("Strength"),
+					                           SpaceType == EPhyControlSpace::World ? &WorldSpace->Strength : &ParentSpace->Strength,
+					                           SpaceType == EPhyControlSpace::World ? WorldStrengthSlider : ParentStrengthSlider,
 					                           [this](float V) { NotifyDataChanged(); })
 				]
 
@@ -339,7 +378,9 @@ TSharedRef<SWidget> UPhyControl_UI::CreateControlSpacePanel(
 				.FillWidth(1.0f)
 				.HAlign(HAlign_Center)
 				[
-					CreateCustomVerticalSlider(TEXT("Damping"), &SpaceData->Damping,
+					CreateCustomVerticalSlider(TEXT("Damping"),
+					                           SpaceType == EPhyControlSpace::World ? &WorldSpace->Damping : &ParentSpace->Damping,
+					                           SpaceType == EPhyControlSpace::World ? WorldDampingSlider : ParentDampingSlider,
 					                           [this](float V) { NotifyDataChanged(); })
 				]
 			];
@@ -428,30 +469,37 @@ TSharedRef<SWidget> UPhyControl_UI::CreateRightButtonColumn()
 // ==================== 辅助控件 ====================
 
 TSharedRef<SWidget> UPhyControl_UI::CreateIndicatorButton(
-	bool* EnabledPtr,
-	TSharedPtr<SImage>& OutIndicator,
-	TFunction<void()> OnClicked)
+	EPhyControlSpace SpaceType,
+	bool* WorldSpaceEnabledPtr,
+	bool* ParentSpaceEnabledPtr, TSharedPtr<SImage>& OutIndicator, TFunction<void()> OnClicked)
 {
-	bool bInitialEnabled = EnabledPtr && *EnabledPtr;
+	bool bInitialEnabled = WorldSpaceEnabledPtr && *WorldSpaceEnabledPtr;
 
-	UpdateIndicatorBrush(bInitialEnabled);
+	UpdateIndicatorBrush(OutIndicator, bInitialEnabled);
 
 	return SNew(SButton)
 		.ButtonStyle(FAppStyle::Get(), "NoBorder")
-		.OnClicked_Lambda([this, EnabledPtr, &OutIndicator, OnClicked]()
+		.OnClicked_Lambda([this, SpaceType,ParentSpaceEnabledPtr,WorldSpaceEnabledPtr, &OutIndicator, OnClicked]()
 		{
-			if (EnabledPtr)
+			if (WorldSpaceEnabledPtr && ParentSpaceEnabledPtr)
 			{
-				*EnabledPtr = !(*EnabledPtr);
-				UpdateIndicator(OutIndicator, *EnabledPtr);
+				*WorldSpaceEnabledPtr = !(*WorldSpaceEnabledPtr);
+				*ParentSpaceEnabledPtr = !(*ParentSpaceEnabledPtr);
+
+				if (WorldIndicator && ParentIndicator)
+				{
+					UpdateIndicator(WorldIndicator, *WorldSpaceEnabledPtr);
+					UpdateIndicator(ParentIndicator, *ParentSpaceEnabledPtr);
+				}
 			}
+
 			if (OnClicked) OnClicked();
 			return FReply::Handled();
 		})
 		[
 			SAssignNew(OutIndicator, SImage)
 			.DesiredSizeOverride(FVector2D(24, 24))
-			.Image(&(bInitialEnabled ? EnabledBrush : DisabledBrush)) // 调用可重载方法
+			.Image(&(bInitialEnabled ? EnabledBrush : DisabledBrush))
 		];
 }
 
@@ -471,34 +519,37 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCircleButton(
 		.HeightOverride(30.0f)
 		[
 			SAssignNew(OutIndicator, SBorder)
+			                                 .Visibility(EVisibility::SelfHitTestInvisible)
 			                                 .BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")) // 使用白色填充Brush实现完全填充背景
 			                                 .BorderBackgroundColor(PhyControlColors::ButtonDefaultGreen) // 默认淡绿色背景
 			                                 .Padding(0)
 			[
 				SNew(SButton)
-				.ButtonStyle(FAppStyle::Get(), "NoBorder")
-				.ContentPadding(FMargin(0))
+				             .ButtonStyle(FAppStyle::Get(), "NoBorder")
+				             .ContentPadding(FMargin(0))
 				// 注意：使用 &OutIndicator 引用捕获，确保每个按钮的 Lambda 都能正确更新自己的 OutIndicator
 				// 如果使用值捕获 [OutIndicator]，所有按钮可能会共享同一个 OutIndicator 引用
-				.OnClicked_Lambda([OnClicked, &OutIndicator]()
-				{
-					// 点击后更新背景色为淡红色
-					if (OutIndicator.IsValid())
-					{
-						OutIndicator->SetBorderBackgroundColor(PhyControlColors::ButtonClickedRed);
-					}
-					if (OnClicked) OnClicked();
-					return FReply::Handled();
-				})
+				             .OnClicked_Lambda([OnClicked, &OutIndicator]()
+				             {
+					             // // 点击后更新背景色为淡红色
+					             // if (OutIndicator.IsValid())
+					             // {
+					             //  OutIndicator->SetBorderBackgroundColor(PhyControlColors::ButtonClickedRed);
+					             // }
+					             if (OnClicked) OnClicked();
+					             return FReply::Handled();
+				             })
 				[
 					SNew(SBox)
 					.HAlign(HAlign_Center)
 					.VAlign(VAlign_Center)
+					.Visibility(EVisibility::SelfHitTestInvisible)
 					[
 						SNew(STextBlock)
 						.Text(FText::FromString(Label))
 						.Font(FCoreStyle::GetDefaultFontStyle("Bold", 14))
 						.ColorAndOpacity(PhyControlColors::TextWhite)
+						.Visibility(EVisibility::SelfHitTestInvisible)
 					]
 				]
 			]
@@ -542,6 +593,7 @@ TSharedRef<SWidget> UPhyControl_UI::CreateBottomButton(
 TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
 	const FString& Label,
 	float* ValuePtr,
+	TSharedPtr<SSlider>& OutSlider,
 	TFunction<void(float)> OnChanged)
 {
 	// 创建横向长方形 Brush
@@ -589,17 +641,17 @@ TSharedRef<SWidget> UPhyControl_UI::CreateCustomVerticalSlider(
 					// 使用 SSlider，但设置 IndentHandle=false 让滑块填满
 					+ SOverlay::Slot()
 					[
-						SNew(SSlider)
-						             .Style(&CustomSliderThumbStyle)
-						             .Orientation(Orient_Vertical)
-						             .IndentHandle(false) // 关键：让滑块可以到达边缘
-						             .Value(ValuePtr ? *ValuePtr : 0.5f)
-						             .SliderBarColor(FLinearColor::Transparent)
-						             .OnValueChanged_Lambda([ValuePtr, OnChanged](float NewValue)
-						             {
-							             if (ValuePtr) *ValuePtr = NewValue;
-							             if (OnChanged) OnChanged(NewValue);
-						             })
+						SAssignNew(OutSlider, SSlider)
+						                              .Style(&CustomSliderThumbStyle)
+						                              .Orientation(Orient_Vertical)
+						                              .IndentHandle(false) // 关键：让滑块可以到达边缘
+						                              .Value(ValuePtr ? *ValuePtr : 0.5f)
+						                              .SliderBarColor(FLinearColor::Transparent)
+						                              .OnValueChanged_Lambda([ValuePtr, OnChanged](float NewValue)
+						                              {
+							                              if (ValuePtr) *ValuePtr = NewValue;
+							                              if (OnChanged) OnChanged(NewValue);
+						                              })
 					]
 				]
 			]
@@ -697,11 +749,4 @@ void UPhyControl_UI::OnInitializeRequested()
 	ControlData.Options.bInitializeRequested = true;
 	NotifyDataChanged();
 	ControlData.Options.bInitializeRequested = false;
-}
-
-void UPhyControl_UI::InitializeSliderImageBrush()
-{
-	// SliderImageBrush.DrawAs = ESlateBrushDrawType::Box;
-	// SliderImageBrush.TintColor = FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f));
-	// SliderImageBrush.ImageSize= FVector2D(20.0f, 20.0f);
 }
